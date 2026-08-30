@@ -57,7 +57,7 @@
 <body>
     <?php wp_app_body_open(); ?>
     <main id="households-profile">
-        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Dashboard', 'households' ); ?></a>
+        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Your homes', 'households' ); ?></a>
         <h1 data-name><?php echo esc_html__( 'Profile', 'households' ); ?></h1>
         <p class="subtitle" data-subtitle></p>
 
@@ -91,7 +91,7 @@
         window.households = <?php echo wp_json_encode( [
             'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
             'nonce'    => wp_create_nonce( 'households_app' ),
-            'memberId' => (int) get_query_var( 'id' ),
+            'memberId' => (int) get_query_var( 'user_id' ),
         ] ); ?>;
     </script>
     <script>

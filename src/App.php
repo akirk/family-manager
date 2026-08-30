@@ -28,7 +28,7 @@ class App extends BaseApp {
         $this->app->add_role( 'member', __( 'Household Member', 'households' ), [ 'read' => true ] );
 
         add_action( 'init', [ $this, 'register_post_types' ] );
-        add_action( 'init', [ $this, 'maybe_switch_household' ], 20 );
+        add_action( 'template_redirect', [ $this, 'route_by_household' ] );
         add_filter( 'login_redirect', [ $this, 'redirect_members_to_app' ], 10, 3 );
         add_action( 'wp_ajax_households_dashboard', [ $this, 'handle_dashboard_request' ] );
     }
@@ -61,56 +61,57 @@ class App extends BaseApp {
         $this->setup_storage();
     }
 
+    /**
+     * Every home has its own address.
+     *
+     * The literal routes are registered before `{id}`, and `{id}` only matches
+     * digits, so a home can never shadow `where` or `profile`.
+     */
     protected function setup_routes(): void {
+        // The index: every home you belong to.
         $this->app->route( '' );
-        // A household administrator viewing the app as one of its members.
-        $this->app->route( 'member/{id}', 'index.php' );
-        // A member's profile: birthday, allergies, sizes, notes.
-        $this->app->route( 'profile/{id}', 'profile.php' );
-        // Household overview: members, roles, settings. Members are added here.
-        $this->app->route( 'household', 'household.php' );
-        // All households the user belongs to, for switching between them.
-        $this->app->route( 'households', 'households.php' );
-        // Who is at which home, day by day, for members who rotate between homes.
+        // Who is at which home, day by day, across the homes you belong to.
         $this->app->route( 'where', 'where.php' );
+        // A person, and the things about them that travel between homes. The
+        // var is `user_id` so that `id` always means a home, wherever it appears.
+        $this->app->route( 'profile/{user_id}', 'profile.php' );
+        // One home: its tasks, appointments, members and notes.
+        $this->app->route( '{id}', 'home.php' );
+        // Managing that home: members, roles, settings.
+        $this->app->route( '{id}/manage', 'manage.php' );
+        // That home, seen as one of its members.
+        $this->app->route( '{id}/as/{user_id}', 'home.php' );
     }
 
     protected function setup_menu(): void {
         $base = home_url( '/' . $this->get_url_path() . '/' );
-        $this->app->add_menu_item( 'dashboard', __( 'Dashboard', 'households' ), $base );
-        $this->app->add_menu_item( 'household', __( 'Household', 'households' ), $base . 'household/' );
-        $this->app->add_menu_item( 'where', __( 'Who is where', 'households' ), $base . 'where/' );
-
         $user_id = get_current_user_id();
         if ( ! $user_id ) {
+            $this->app->add_menu_item( 'index', __( 'Your homes', 'households' ), $base );
             return;
         }
 
-        $current = $this->storage->current_household_id( $user_id );
         $households = $this->storage->get_households_for_user( $user_id );
-        if ( count( $households ) > 1 ) {
-            $this->app->add_menu_item( 'households', __( 'All households', 'households' ), $base . 'households/' );
-            foreach ( $households as $household ) {
-                $is_current = $household['id'] === $current;
-                $this->app->add_menu_item(
-                    'household-' . $household['id'],
-                    ( $is_current ? '● ' : '○ ' ) . $household['name'],
-                    add_query_arg( 'household', $household['id'], $base )
-                );
-            }
+        $this->app->add_menu_item( 'index', count( $households ) > 1 ? __( 'Your homes', 'households' ) : __( 'Home', 'households' ), $base );
+
+        // Each home is a place you go to, not a mode you switch into.
+        foreach ( $households as $household ) {
+            $this->app->add_menu_item( 'household-' . $household['id'], $household['name'], $base . $household['id'] . '/' );
         }
 
-        if ( $current && Access::can_manage( $user_id, $current ) ) {
-            $viewing_as = (int) get_query_var( 'id' );
-            $this->app->add_menu_item( 'view-self', __( 'My view', 'households' ), $base );
-            foreach ( $this->storage->get_members( $current ) as $member ) {
+        $this->app->add_menu_item( 'where', __( 'Who is where', 'households' ), $base . 'where/' );
+
+        $open = $this->household_in_view( $user_id );
+        if ( $open && Access::can_manage( $user_id, $open ) ) {
+            $this->app->add_menu_item( 'manage', __( 'Manage this home', 'households' ), $base . $open . '/manage/' );
+            foreach ( $this->storage->get_members( $open ) as $member ) {
                 if ( $member['id'] === $user_id ) {
                     continue;
                 }
                 $this->app->add_menu_item(
                     'view-as-' . $member['id'],
                     sprintf( __( 'View as %s', 'households' ), $member['name'] ),
-                    $base . 'member/' . $member['id'] . '/'
+                    $base . $open . '/as/' . $member['id'] . '/'
                 );
             }
         }
@@ -118,14 +119,63 @@ class App extends BaseApp {
         $this->app->add_user_menu_item( 'my-profile', __( 'My profile', 'households' ), $base . 'profile/' . $user_id . '/' );
     }
 
-    /** `?household=<id>` on any app URL switches the current household. */
-    public function maybe_switch_household(): void {
-        if ( ! isset( $_GET['household'] ) || ! is_user_logged_in() ) {
+    /**
+     * The home the current page is about: the one in the URL, else the last one
+     * visited. Used for the menu and for the views that span homes.
+     */
+    public function household_in_view( int $user_id ): int {
+        $from_url = (int) get_query_var( 'id' );
+        if ( $from_url && Access::is_member( $user_id, $from_url ) ) {
+            return $from_url;
+        }
+        return $this->storage->last_household_id( $user_id );
+    }
+
+    /**
+     * The path within the app for this request, or null if this is not one.
+     *
+     * The router itself only runs at `template_include`, by which point it is
+     * too late to redirect; this reads the same path from the query vars
+     * WordPress has already parsed.
+     */
+    private function app_request_path(): ?string {
+        global $wp_query;
+        if ( ! $wp_query || ! isset( $wp_query->query_vars['wp_app_request'] ) ) {
+            return null;
+        }
+        if ( get_query_var( 'wp_app_path' ) !== $this->get_url_path() ) {
+            return null;
+        }
+        return trim( (string) get_query_var( 'wp_app_request' ), '/' );
+    }
+
+    /**
+     * Every home is addressed by ID, so both of these run before anything is
+     * rendered: one sends a lone householder straight in, the other turns away
+     * a request for a home the viewer does not belong to.
+     */
+    public function route_by_household(): void {
+        $path = $this->app_request_path();
+        if ( null === $path || ! is_user_logged_in() ) {
             return;
         }
-        $this->storage->switch_household( get_current_user_id(), absint( $_GET['household'] ) );
-        wp_safe_redirect( remove_query_arg( 'household' ) );
-        exit;
+
+        $user_id = get_current_user_id();
+        $index = home_url( '/' . $this->get_url_path() . '/' );
+
+        if ( '' === $path ) {
+            $households = Access::household_ids_for_user( $user_id );
+            if ( 1 === count( $households ) ) {
+                wp_safe_redirect( $index . $households[0] . '/' );
+                exit;
+            }
+            return;
+        }
+
+        if ( preg_match( '#^(\d+)(?:/|$)#', $path, $matches ) && ! Access::is_member( $user_id, (int) $matches[1] ) ) {
+            wp_safe_redirect( $index );
+            exit;
+        }
     }
 
     /** Members have nothing to do in wp-admin; send them to the app after login. */
@@ -204,10 +254,24 @@ class App extends BaseApp {
             wp_send_json_success( [ 'households' => $this->storage->get_households_overview( $user_id ) ] );
         }
 
-        $dashboard = $this->storage->get_dashboard( $user_id, $subject_id );
-        $household_id = isset( $dashboard['household']['id'] ) ? (int) $dashboard['household']['id'] : 0;
+        // The home is named by the page asking. A request that names one the
+        // viewer does not belong to is refused rather than quietly answered
+        // about a different home; only a request that names none at all — the
+        // views that span homes — falls back to the last one visited.
+        if ( isset( $_POST['household_id'] ) && absint( $_POST['household_id'] ) ) {
+            $household_id = absint( $_POST['household_id'] );
+            $this->assert_allowed( Access::is_member( $user_id, $household_id ) );
+        } else {
+            $household_id = $this->storage->last_household_id( $user_id );
+        }
         if ( ! $household_id ) {
             wp_send_json_error( [ 'message' => __( 'No household found.', 'households' ) ], 404 );
+        }
+        $this->storage->remember_household( $user_id, $household_id );
+
+        $dashboard = $this->storage->get_dashboard( $user_id, $household_id, $subject_id );
+        if ( empty( $dashboard['household']['id'] ) ) {
+            wp_send_json_error( [ 'message' => __( 'You do not have access to this home.', 'households' ) ], 403 );
         }
 
         $can_manage = Access::can_manage( $user_id, $household_id );
@@ -350,7 +414,7 @@ class App extends BaseApp {
                 break;
         }
 
-        wp_send_json_success( $this->storage->get_dashboard( $user_id, $subject_id ) );
+        wp_send_json_success( $this->storage->get_dashboard( $user_id, $household_id, $subject_id ) );
     }
 
     private function assert_allowed( bool $allowed ): void {

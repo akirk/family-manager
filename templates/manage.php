@@ -82,7 +82,7 @@
     <?php wp_app_body_open(); ?>
 
     <main id="households-household">
-        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Dashboard', 'households' ); ?></a>
+        <a class="back" href="<?php echo esc_url( home_url( '/households/' . (int) get_query_var( 'id' ) . '/' ) ); ?>">&larr; <?php echo esc_html__( 'Back to this home', 'households' ); ?></a>
         <h1 data-name><?php echo esc_html__( 'Household', 'households' ); ?></h1>
         <p class="subtitle" data-subtitle></p>
         <div class="status" data-status><?php echo esc_html__( 'Loading household...', 'households' ); ?></div>
@@ -139,11 +139,14 @@
     </main>
 
     <script>
-        window.households = <?php echo wp_json_encode( [
-            'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
-            'nonce'      => wp_create_nonce( 'households_app' ),
-            'memberUrl'  => home_url( '/households/member/' ),
-            'profileUrl' => home_url( '/households/profile/' ),
+        window.households = <?php
+        $household_id = (int) get_query_var( 'id' );
+        echo wp_json_encode( [
+            'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
+            'nonce'       => wp_create_nonce( 'households_app' ),
+            'householdId' => $household_id,
+            'homeUrl'     => home_url( '/households/' . $household_id . '/' ),
+            'profileUrl'  => home_url( '/households/profile/' ),
         ] ); ?>;
     </script>
     <script>
@@ -161,6 +164,7 @@
                 const body = new FormData();
                 body.append('action', 'households_dashboard');
                 body.append('nonce', window.households.nonce);
+                body.append('household_id', window.households.householdId);
                 Object.keys(payload || {}).forEach((key) => body.append(key, payload[key]));
                 return fetch(window.households.ajaxUrl, { method: 'POST', credentials: 'same-origin', body })
                     .then((response) => response.json())
@@ -227,7 +231,7 @@
                     }
                     if (data.permissions.manage && !isSelf) {
                         const view = document.createElement('a');
-                        view.href = window.households.memberUrl + member.id + '/';
+                        view.href = window.households.homeUrl + 'as/' + member.id + '/';
                         view.textContent = '<?php echo esc_js( __( 'View as', 'households' ) ); ?>';
                         view.title = '<?php echo esc_js( __( 'See the dashboard as this member', 'households' ) ); ?>';
                         actions.appendChild(view);

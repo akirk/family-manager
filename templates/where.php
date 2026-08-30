@@ -51,6 +51,9 @@
         .panel h2 { margin: 0 0 12px; font-size: 1.05rem; }
         .panel p.hint { margin: -6px 0 12px; color: var(--fm-muted); font-size: 0.9rem; }
 
+        .seen-from { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin: 0 0 16px; color: var(--fm-muted); font-size: 0.9rem; }
+        .seen-from a { display: inline-flex; align-items: center; min-height: 30px; padding: 0 10px; border: 1px solid var(--fm-line); border-radius: 999px; color: var(--fm-accent-strong); font-weight: 700; text-decoration: none; }
+        .seen-from a[aria-current="true"] { background: var(--fm-accent); border-color: var(--fm-accent-strong); color: #fff; }
         .clock-panel { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 20px; align-items: center; }
         .dial { width: 100%; max-width: 360px; height: auto; margin: 0 auto; display: block; }
         .dial .face { fill: var(--fm-dial); stroke: var(--fm-line); stroke-width: 2; }
@@ -143,10 +146,11 @@
     <?php wp_app_body_open(); ?>
 
     <main id="households-where">
-        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Dashboard', 'households' ); ?></a>
+        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Your homes', 'households' ); ?></a>
         <h1><?php echo esc_html__( 'Who is where', 'households' ); ?></h1>
         <p class="subtitle"><?php echo esc_html__( 'Anyone who splits their time between homes — children between parents, a week at the grandparents, the holiday house — and the handovers that follow from it.', 'households' ); ?></p>
         <div class="status" data-status><?php echo esc_html__( 'Loading...', 'households' ); ?></div>
+        <p class="seen-from" data-seen-from hidden><span></span></p>
 
         <div class="panel">
             <div class="clock-panel">
@@ -193,12 +197,25 @@
     </dialog>
 
     <script>
-        window.households = <?php echo wp_json_encode( [
-            'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-            'nonce'   => wp_create_nonce( 'households_app' ),
+        window.households = <?php
+        // This view spans homes, so it needs one to look from: the one asked
+        // for, else the last one visited.
+        $storage = new \Households\Storage();
+        $viewer_id = get_current_user_id();
+        $from = isset( $_GET['from'] ) ? absint( $_GET['from'] ) : 0;
+        if ( ! $from || ! \Households\Access::is_member( $viewer_id, $from ) ) {
+            $from = $storage->last_household_id( $viewer_id );
+        }
+        echo wp_json_encode( [
+            'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
+            'nonce'       => wp_create_nonce( 'households_app' ),
+            'householdId' => $from,
+            'baseUrl'     => home_url( '/households/' ),
+            'whereUrl'    => home_url( '/households/where/' ),
         ] ); ?>;
         window.householdsText = <?php echo wp_json_encode( [
             'here'          => __( 'here', 'households' ),
+            'seenFrom'      => __( 'Seen from', 'households' ),
             'isHere'        => __( '%s is here', 'households' ),
             'isAt'          => __( '%1$s is at %2$s', 'households' ),
             'untilDate'     => __( 'until %1$s, then %2$s', 'households' ),
@@ -246,6 +263,7 @@
             const organiser = root.querySelector('[data-organiser]');
             const rotations = root.querySelector('[data-rotations]');
             const dialog = document.querySelector('[data-override-dialog]');
+            const seenFrom = root.querySelector('[data-seen-from]');
             const SVG = 'http://www.w3.org/2000/svg';
 
             let start = '';
@@ -264,6 +282,7 @@
                 const body = new FormData();
                 body.append('action', 'households_dashboard');
                 body.append('nonce', window.households.nonce);
+                body.append('household_id', window.households.householdId);
                 Object.keys(payload || {}).forEach((key) => {
                     if (Array.isArray(payload[key])) {
                         payload[key].forEach((value) => body.append(key + '[]', value));
@@ -779,9 +798,30 @@
                 dialog.showModal();
             }
 
+            /** The board reads from one home; say which, and offer the others. */
+            function renderSeenFrom(data) {
+                const homes = data.households || [];
+                seenFrom.hidden = homes.length < 2;
+                if (seenFrom.hidden) {
+                    return;
+                }
+                seenFrom.innerHTML = '<span></span>';
+                seenFrom.querySelector('span').textContent = text.seenFrom;
+                homes.forEach((home) => {
+                    const link = document.createElement('a');
+                    link.href = window.households.whereUrl + '?from=' + home.id;
+                    link.textContent = home.name;
+                    if (home.id === data.household.id) {
+                        link.setAttribute('aria-current', 'true');
+                    }
+                    seenFrom.appendChild(link);
+                });
+            }
+
             function render(data) {
                 start = data.board.start;
                 assignColors(data);
+                renderSeenFrom(data);
                 renderClock(data);
                 renderNow(data);
                 renderBoard(data);

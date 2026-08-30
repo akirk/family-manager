@@ -22,26 +22,31 @@ class Storage {
 
     /* ---------------------------------------------------------------- Households */
 
-    public const META_CURRENT_HOUSEHOLD = '_households_current_household';
+    public const META_LAST_HOUSEHOLD = '_households_last_household';
 
     /**
-     * The household a user is currently looking at: their remembered choice
-     * if they are still a member there, otherwise the first one they belong to.
+     * The last home this user was looking at.
+     *
+     * Every home has its own URL, so this is not a mode anyone switches into:
+     * it is a note of where they were, used to pick a landing spot and to give
+     * the cross-home views somewhere to look from. It falls back to the first
+     * home they belong to, and to nothing at all if they belong to none.
      */
-    public function current_household_id( int $user_id ): int {
+    public function last_household_id( int $user_id ): int {
         $households = Access::household_ids_for_user( $user_id );
         if ( ! $households ) {
             return 0;
         }
-        $current = (int) get_user_meta( $user_id, self::META_CURRENT_HOUSEHOLD, true );
-        return in_array( $current, $households, true ) ? $current : $households[0];
+        $last = (int) get_user_meta( $user_id, self::META_LAST_HOUSEHOLD, true );
+        return in_array( $last, $households, true ) ? $last : $households[0];
     }
 
-    public function switch_household( int $user_id, int $household_id ): bool {
+    /** Records a visit. Called when a home is opened, not by a switcher. */
+    public function remember_household( int $user_id, int $household_id ): bool {
         if ( ! Access::is_member( $user_id, $household_id ) ) {
             return false;
         }
-        update_user_meta( $user_id, self::META_CURRENT_HOUSEHOLD, $household_id );
+        update_user_meta( $user_id, self::META_LAST_HOUSEHOLD, $household_id );
         return true;
     }
 
@@ -51,11 +56,12 @@ class Storage {
     }
 
     /**
-     * The user's households with what an overview needs: their role there,
-     * who else is in it, how much is open, and whether it is the current one.
+     * The user's homes with what the index needs to be worth landing on: their
+     * role there, who is under that roof today, who else belongs to it, and how
+     * much is open.
      */
     public function get_households_overview( int $user_id ): array {
-        $current = $this->current_household_id( $user_id );
+        $last = $this->last_household_id( $user_id );
         $overview = [];
         foreach ( $this->get_households_for_user( $user_id ) as $household ) {
             $id = $household['id'];
@@ -80,11 +86,12 @@ class Storage {
             }
             $role = Access::role_in_household( $user_id, $id );
             $overview[] = $household + [
-                'is_current'   => $id === $current,
+                'is_last'      => $id === $last,
                 'role'         => $role,
                 'role_label'   => Access::roles()[ $role ] ?? '',
                 'can_manage'   => Access::can_manage( $user_id, $id ),
                 'member_names' => array_column( $members, 'name' ),
+                'here_names'   => $this->who_is_here( $id ),
                 'open_tasks'   => $open_tasks,
                 'appointments' => $appointments,
             ];
@@ -92,10 +99,11 @@ class Storage {
         return $overview;
     }
 
+    /** Someone with no home at all gets one, so the app is never empty. */
     public function get_or_create_household_for_user( int $user_id ): array {
-        $current = $this->current_household_id( $user_id );
-        if ( $current ) {
-            return $this->format_household( $current );
+        $existing = $this->last_household_id( $user_id );
+        if ( $existing ) {
+            return $this->format_household( $existing );
         }
 
         $user = get_userdata( $user_id );
@@ -147,27 +155,34 @@ class Storage {
     /* ---------------------------------------------------------------- Dashboard */
 
     /**
-     * Everything the app needs to render one member's view.
+     * Everything the app needs to render one home, as one member sees it.
      *
-     * @param int $viewer_id  The logged-in user.
-     * @param int $subject_id Whose view to build; defaults to the viewer. A
-     *                        manager of the subject's household may view as them.
+     * The home is named by the caller rather than inferred from a remembered
+     * choice: every home has its own URL, and this answers for the one asked
+     * about, or for nothing if the viewer does not belong there.
+     *
+     * @param int $viewer_id    The logged-in user.
+     * @param int $household_id The home being opened.
+     * @param int $subject_id   Whose view to build; defaults to the viewer. A
+     *                          manager of that home may view as one of its members.
      */
-    public function get_dashboard( int $viewer_id, int $subject_id = 0 ): array {
+    public function get_dashboard( int $viewer_id, int $household_id, int $subject_id = 0 ): array {
         $subject_id = $subject_id ?: $viewer_id;
-        if ( ! Access::can_view_user( $viewer_id, $subject_id ) ) {
+
+        $household = $this->format_household( $household_id );
+        if ( ! $household || ! Access::is_member( $viewer_id, $household_id ) ) {
             return $this->empty_dashboard();
         }
 
-        $household = $viewer_id === $subject_id
-            ? $this->get_or_create_household_for_user( $subject_id )
-            : $this->format_household( $this->household_for_viewing_as( $viewer_id, $subject_id ) );
-        $household_id = isset( $household['id'] ) ? (int) $household['id'] : 0;
-        if ( ! $household_id ) {
+        // Viewing as someone else only makes sense for a member of this home,
+        // and only for someone allowed to look.
+        if ( $subject_id !== $viewer_id
+            && ( ! Access::is_member( $subject_id, $household_id )
+                || ! Access::can_manage( $viewer_id, $household_id )
+                || ! Access::can_view_user( $viewer_id, $subject_id ) ) ) {
             return $this->empty_dashboard();
         }
 
-        $subject_role = Access::role_in_household( $subject_id, $household_id );
         $tasks = $this->get_tasks( $household_id );
         $rewards = $this->get_rewards( $household_id );
 
@@ -198,24 +213,6 @@ class Storage {
             'tasks'       => $tasks,
             'rewards'     => $rewards,
         ];
-    }
-
-    /**
-     * Which household to show when a manager views as another member: the
-     * manager's current one if the subject belongs to it, else the first
-     * household the manager runs that the subject is part of.
-     */
-    private function household_for_viewing_as( int $viewer_id, int $subject_id ): int {
-        $current = $this->current_household_id( $viewer_id );
-        if ( $current && Access::is_member( $subject_id, $current ) && Access::can_manage( $viewer_id, $current ) ) {
-            return $current;
-        }
-        foreach ( Access::household_ids_for_user( $subject_id ) as $household_id ) {
-            if ( Access::can_manage( $viewer_id, $household_id ) ) {
-                return $household_id;
-            }
-        }
-        return 0;
     }
 
     private function empty_dashboard(): array {
@@ -451,6 +448,25 @@ class Storage {
             'patterns'   => $this->format_patterns(),
             'households' => $this->get_households_in_play( $household_id ),
         ];
+    }
+
+    /**
+     * Who is under this roof today.
+     *
+     * Everyone counts, not only the people who rotate: someone who belongs to
+     * this home alone is simply here, and leaving them out would make a settled
+     * household look empty.
+     *
+     * @return string[] names.
+     */
+    public function who_is_here( int $household_id ): array {
+        $names = [];
+        foreach ( $this->members_with_days( $household_id, current_time( 'Y-m-d' ), 1 ) as $member ) {
+            if ( ! empty( $member['now']['is_here'] ) ) {
+                $names[] = $member['name'];
+            }
+        }
+        return $names;
     }
 
     /**
