@@ -1,296 +1,144 @@
-<!DOCTYPE html>
-<html <?php wp_app_language_attributes(); ?>>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo wp_app_title(); ?></title>
-    <?php wp_app_head(); ?>
-    <style>
-        :root {
-            color-scheme: light dark;
-            --fm-bg: #f6f7f2;
-            --fm-text: #17201b;
-            --fm-muted: #607067;
-            --fm-surface: #ffffff;
-            --fm-line: #d9e0d8;
-            --fm-accent: #176b5b;
-            --fm-accent-strong: #0f4f43;
-            --fm-warm: #9b5d2f;
-            --fm-blue: #315f8f;
-        }
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --fm-bg: #111614;
-                --fm-text: #eef3ee;
-                --fm-muted: #a7b3aa;
-                --fm-surface: #1a211e;
-                --fm-line: #344039;
-                --fm-accent: #55b7a2;
-                --fm-accent-strong: #87d4c2;
-                --fm-warm: #d29561;
-                --fm-blue: #86add8;
-            }
-        }
-        * { box-sizing: border-box; }
-        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; background: var(--fm-bg); color: var(--fm-text); line-height: 1.5; }
-        button, input, select { font: inherit; }
-        button { min-height: 40px; padding: 0 16px; border: 1px solid var(--fm-accent-strong); border-radius: 6px; background: var(--fm-accent); color: #fff; font-weight: 700; cursor: pointer; }
-        button.secondary { background: transparent; color: var(--fm-accent-strong); }
-        input:not([type="checkbox"]), select { width: 100%; min-height: 40px; padding: 0 10px; border: 1px solid var(--fm-line); border-radius: 6px; background: var(--fm-surface); color: var(--fm-text); }
-        main { width: min(980px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 40px; }
-        .back { display: inline-block; margin-bottom: 12px; color: var(--fm-accent-strong); font-weight: 700; text-decoration: none; }
-        h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 3rem); line-height: 1.1; }
-        .subtitle { margin: 6px 0 20px; color: var(--fm-muted); }
-        .status { color: var(--fm-muted); font-size: 0.92rem; min-height: 22px; }
-        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
-        .stat { border-left: 4px solid var(--fm-accent); background: var(--fm-surface); border-radius: 6px; padding: 12px; }
-        .stat:nth-child(2) { border-color: var(--fm-blue); }
-        .stat:nth-child(3) { border-color: var(--fm-warm); }
-        .stat strong { display: block; font-size: 1.6rem; line-height: 1; }
-        .stat span { color: var(--fm-muted); font-size: 0.85rem; }
-        .grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 16px; align-items: start; }
-        .panel { background: var(--fm-surface); border: 1px solid var(--fm-line); border-radius: 8px; padding: 16px; }
-        .panel + .panel { margin-top: 16px; }
-        .panel h2 { margin: 0 0 12px; font-size: 1.05rem; }
-        .panel p.hint { margin: -6px 0 12px; color: var(--fm-muted); font-size: 0.9rem; }
-        form { display: grid; gap: 8px; }
-        .member-list, .info-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-        .info-list .detail { white-space: pre-wrap; word-break: break-word; }
-        .add-info { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 8px; margin-top: 12px; }
-        @media (max-width: 620px) { .add-info { grid-template-columns: 1fr; } }
-        .item { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; border: 1px solid var(--fm-line); border-radius: 6px; padding: 10px; }
-        .title { font-weight: 750; }
-        .meta { color: var(--fm-muted); font-size: 0.86rem; }
-        .pill { display: inline-flex; align-items: center; min-height: 26px; padding: 0 8px; border-radius: 999px; background: color-mix(in srgb, var(--fm-accent) 12%, transparent); color: var(--fm-accent-strong); font-size: 0.82rem; font-weight: 700; white-space: nowrap; }
-        .empty { color: var(--fm-muted); border: 1px dashed var(--fm-line); border-radius: 6px; padding: 18px; text-align: center; }
-        .member-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; }
-        .member-actions select { min-height: 32px; width: auto; }
-        .member-actions button { min-height: 32px; padding: 0 8px; }
-        .member-actions a { display: inline-flex; align-items: center; min-height: 32px; padding: 0 8px; border: 1px solid var(--fm-line); border-radius: 6px; color: var(--fm-accent-strong); font-size: 0.85rem; font-weight: 700; text-decoration: none; }
-        [hidden] { display: none !important; }
-        @media (max-width: 760px) {
-            .grid { grid-template-columns: 1fr; }
-            .item { grid-template-columns: 1fr; }
-            .member-actions { justify-content: flex-start; }
-        }
-    </style>
-</head>
-<body>
-    <?php wp_app_body_open(); ?>
+<?php
+$hh_home_id = (int) get_query_var( 'id' );
+require __DIR__ . '/_head.php';
+?>
+        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Your homes', 'households' ); ?></a>
+        <h1><?php echo esc_html__( 'Manage this home', 'households' ); ?></h1>
+        <p class="subtitle" data-home-name></p>
+        <div class="status" data-status><?php echo esc_html__( 'Loading…', 'households' ); ?></div>
 
-    <main id="households-household">
-        <a class="back" href="<?php echo esc_url( home_url( '/households/' . (int) get_query_var( 'id' ) . '/' ) ); ?>">&larr; <?php echo esc_html__( 'Back to this home', 'households' ); ?></a>
-        <h1 data-name><?php echo esc_html__( 'Household', 'households' ); ?></h1>
-        <p class="subtitle" data-subtitle></p>
-        <div class="status" data-status><?php echo esc_html__( 'Loading household...', 'households' ); ?></div>
-
-        <section class="stats" aria-label="<?php echo esc_attr__( 'Household summary', 'households' ); ?>">
-            <div class="stat"><strong data-stat="members">0</strong><span><?php echo esc_html__( 'Members', 'households' ); ?></span></div>
-            <div class="stat"><strong data-stat="tasks">0</strong><span><?php echo esc_html__( 'Open tasks', 'households' ); ?></span></div>
-            <div class="stat"><strong data-stat="appointments">0</strong><span><?php echo esc_html__( 'Appointments', 'households' ); ?></span></div>
+        <section>
+            <h2><?php echo esc_html__( 'Name', 'households' ); ?></h2>
+            <form class="grid" data-rename>
+                <label class="wide"><?php echo esc_html__( 'What this home is called', 'households' ); ?>
+                    <input type="text" name="name" required>
+                </label>
+                <button class="primary" type="submit"><?php echo esc_html__( 'Save', 'households' ); ?></button>
+            </form>
         </section>
 
-        <section class="grid">
-            <div>
-                <div class="panel">
-                    <h2><?php echo esc_html__( 'Members', 'households' ); ?></h2>
-                    <ul class="member-list" data-members-list></ul>
-                </div>
-                <div class="panel">
-                    <h2><?php echo esc_html__( 'About this home', 'households' ); ?></h2>
-                    <p class="hint"><?php echo esc_html__( 'The things people ask when they are here without you: the wifi code, where the water main valve is, which day the bins go out. Everyone in this household can read it.', 'households' ); ?></p>
-                    <ul class="info-list" data-info-list></ul>
-                    <form class="add-info" data-action="add_household_info" data-organiser-only hidden>
-                        <input name="label" required placeholder="<?php echo esc_attr__( 'Wifi, bin day, alarm code...', 'households' ); ?>">
-                        <input name="detail" placeholder="<?php echo esc_attr__( 'The answer', 'households' ); ?>">
-                        <button type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-                    </form>
-                </div>
-            </div>
-            <div data-manage hidden>
-                <div class="panel">
-                    <h2><?php echo esc_html__( 'Add a member', 'households' ); ?></h2>
-                    <p class="hint"><?php echo esc_html__( 'Creates a login for them. With an email, an existing account is linked instead.', 'households' ); ?></p>
-                    <form data-action="add_member">
-                        <input name="name" required placeholder="<?php echo esc_attr__( 'Name', 'households' ); ?>">
-                        <select name="role" data-roles></select>
-                        <input name="email" type="email" placeholder="<?php echo esc_attr__( 'Email (optional)', 'households' ); ?>">
-                        <input name="password" type="text" autocomplete="off" placeholder="<?php echo esc_attr__( 'Password (optional)', 'households' ); ?>">
-                        <button type="submit"><?php echo esc_html__( 'Add member', 'households' ); ?></button>
-                    </form>
-                </div>
-                <div class="panel">
-                    <h2><?php echo esc_html__( 'Settings', 'households' ); ?></h2>
-                    <form data-action="update_household" data-settings>
-                        <input name="name" required aria-label="<?php echo esc_attr__( 'Household name', 'households' ); ?>">
-                        <button type="submit"><?php echo esc_html__( 'Save settings', 'households' ); ?></button>
-                    </form>
-                </div>
-            </div>
+        <section>
+            <h2><?php echo esc_html__( 'Who is in it', 'households' ); ?></h2>
+            <ul class="plain" data-people></ul>
         </section>
-    </main>
 
-    <script>
-        window.households = <?php
-        $household_id = (int) get_query_var( 'id' );
-        echo wp_json_encode( [
-            'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
-            'nonce'       => wp_create_nonce( 'households_app' ),
-            'householdId' => $household_id,
-            'homeUrl'     => home_url( '/households/' . $household_id . '/' ),
-            'profileUrl'  => home_url( '/households/profile/' ),
-        ] ); ?>;
-    </script>
+        <section>
+            <h2><?php echo esc_html__( 'Add someone', 'households' ); ?></h2>
+            <p class="meta"><?php echo esc_html__( 'An email address gives them an account they can log in with. Leave it empty for someone who will never log in — a small child, or a relative you are only keeping notes about.', 'households' ); ?></p>
+            <form class="grid" data-add-person>
+                <label><?php echo esc_html__( 'Name', 'households' ); ?><input type="text" name="name" required></label>
+                <label><?php echo esc_html__( 'Email (optional)', 'households' ); ?><input type="email" name="email"></label>
+                <label><?php echo esc_html__( 'Password (optional)', 'households' ); ?><input type="text" name="password" autocomplete="off"></label>
+                <label><?php echo esc_html__( 'Called', 'households' ); ?>
+                    <input type="text" name="label" placeholder="<?php echo esc_attr__( 'Grandparent', 'households' ); ?>">
+                </label>
+                <label><?php echo esc_html__( 'Born', 'households' ); ?><input type="date" name="birthdate"></label>
+                <label class="inline"><input type="checkbox" name="is_child"> <?php echo esc_html__( 'Is a child', 'households' ); ?></label>
+                <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
+            </form>
+        </section>
     <script>
         (function() {
-            const root = document.getElementById('households-household');
-            const status = root.querySelector('[data-status]');
-            const memberList = root.querySelector('[data-members-list]');
-            const infoList = root.querySelector('[data-info-list]');
-            const manage = root.querySelector('[data-manage]');
-            const settings = root.querySelector('[data-settings]');
-            const roleSelect = root.querySelector('[data-roles]');
-            const roleLabels = {};
+            const t = {
+                child: '<?php echo esc_js( __( 'Child', 'households' ) ); ?>',
+                isChild: '<?php echo esc_js( __( 'Is a child', 'households' ) ); ?>',
+                admin: '<?php echo esc_js( __( 'Administers this home', 'households' ) ); ?>',
+                noAccount: '<?php echo esc_js( __( 'No account', 'households' ) ); ?>',
+                makeAdmin: '<?php echo esc_js( __( 'Make administrator', 'households' ) ); ?>',
+                dropAdmin: '<?php echo esc_js( __( 'Remove as administrator', 'households' ) ); ?>',
+                remove: '<?php echo esc_js( __( 'Remove from this home', 'households' ) ); ?>',
+                confirm: '<?php echo esc_js( __( 'Remove %s from this home? Their record and everything written on it stays.', 'households' ) ); ?>',
+                page: '<?php echo esc_js( __( 'Open page', 'households' ) ); ?>',
+                saved: '<?php echo esc_js( __( 'Saved.', 'households' ) ); ?>',
+                none: '<?php echo esc_js( __( 'Nobody here yet.', 'households' ) ); ?>',
+                you: '<?php echo esc_js( __( 'You', 'households' ) ); ?>',
+            };
+            const nodes = {
+                name: document.querySelector('[data-home-name]'),
+                people: document.querySelector('[data-people]'),
+                rename: document.querySelector('[data-rename]'),
+                addPerson: document.querySelector('[data-add-person]'),
+            };
 
-            function request(payload) {
-                const body = new FormData();
-                body.append('action', 'households_dashboard');
-                body.append('nonce', window.households.nonce);
-                body.append('household_id', window.households.householdId);
-                Object.keys(payload || {}).forEach((key) => body.append(key, payload[key]));
-                return fetch(window.households.ajaxUrl, { method: 'POST', credentials: 'same-origin', body })
-                    .then((response) => response.json())
-                    .then((result) => {
-                        if (!result.success) {
-                            throw new Error(result.data && result.data.message ? result.data.message : 'Request failed');
-                        }
-                        return result.data;
-                    });
-            }
-
-            function roleOptions(select, selected) {
-                select.innerHTML = '';
-                Object.keys(roleLabels).forEach((key) => {
-                    const option = document.createElement('option');
-                    option.value = key;
-                    option.textContent = roleLabels[key];
-                    option.selected = key === selected;
-                    select.appendChild(option);
-                });
+            function send(action, fields) {
+                hh.say('');
+                return hh.post(action, fields).then(render).catch((error) => hh.say(error.message, true));
             }
 
             function render(data) {
-                Object.assign(roleLabels, data.roles);
+                nodes.name.textContent = data.home.name;
+                nodes.rename.name.value = data.home.name;
 
-                root.querySelector('[data-name]').textContent = data.household.name;
-                root.querySelector('[data-subtitle]').textContent = data.permissions.manage
-                    ? '<?php echo esc_js( __( 'You manage this household. Add members, change their roles and adjust settings here.', 'households' ) ); ?>'
-                    : '<?php echo esc_js( __( 'Everyone in this household and how to reach their profile.', 'households' ) ); ?>';
-                document.title = data.household.name + ' · ' + document.title.replace(/^.*· /, '');
-
-                const openTasks = data.tasks.filter((task) => task.is_done === '0');
-                root.querySelector('[data-stat="members"]').textContent = data.members.length;
-                root.querySelector('[data-stat="tasks"]').textContent = openTasks.filter((task) => task.task_type !== 'appointment').length;
-                root.querySelector('[data-stat="appointments"]').textContent = openTasks.filter((task) => task.task_type === 'appointment').length;
-
-                manage.hidden = !data.permissions.manage;
-                if (!roleSelect.options.length) {
-                    roleOptions(roleSelect, 'child');
+                nodes.people.innerHTML = '';
+                if (!data.people.length) {
+                    nodes.people.appendChild(hh.el('li', { class: 'empty', text: t.none }));
                 }
-                if (document.activeElement === null || !settings.contains(document.activeElement)) {
-                    settings.elements.name.value = data.household.name;
-                }
+                data.people.forEach((person) => {
+                    const isSelf = person.id === data.viewer.person_id;
+                    const isAdmin = data.admins.indexOf(person.id) !== -1;
+                    const pills = [];
+                    if (person.is_child) { pills.push(hh.el('span', { class: 'pill', text: t.child })); }
+                    if (person.label) { pills.push(hh.el('span', { class: 'pill', text: person.label })); }
+                    if (isAdmin) { pills.push(hh.el('span', { class: 'pill', text: t.admin })); }
+                    if (!person.user_id) { pills.push(hh.el('span', { class: 'pill warm', text: t.noAccount })); }
 
-                memberList.innerHTML = data.members.length ? '' : '<li class="empty"><?php echo esc_js( __( 'No members yet.', 'households' ) ); ?></li>';
-                data.members.forEach((member) => {
-                    const item = document.createElement('li');
-                    const isSelf = member.id === data.viewer.id;
-                    item.className = 'item';
-                    item.innerHTML = '<div><div class="title"></div><div class="meta"></div></div><div class="member-actions"></div>';
-                    item.querySelector('.title').textContent = member.name + (isSelf ? ' (<?php echo esc_js( __( 'you', 'households' ) ); ?>)' : '');
-                    item.querySelector('.meta').textContent = [member.role_label, '@' + member.login].join(' · ');
-                    const actions = item.querySelector('.member-actions');
-
-                    if (isSelf || data.viewer.can_organise) {
-                        const profile = document.createElement('a');
-                        profile.href = window.households.profileUrl + member.id + '/';
-                        profile.textContent = '<?php echo esc_js( __( 'Profile', 'households' ) ); ?>';
-                        actions.appendChild(profile);
+                    const actions = [hh.el('a', { class: 'button quiet', href: hh.personUrl(person.id), text: t.page })];
+                    // Someone with no account has nothing to administer with, and
+                    // an administrator may not drop themselves and leave nobody.
+                    if (person.user_id && !isSelf) {
+                        actions.push(hh.el('button', {
+                            class: 'quiet', type: 'button', text: isAdmin ? t.dropAdmin : t.makeAdmin,
+                            onclick: () => send('set_admin', { person_id: person.id, is_admin: isAdmin ? 0 : 1 }),
+                        }));
                     }
-                    if (data.permissions.manage && !isSelf) {
-                        const view = document.createElement('a');
-                        view.href = window.households.homeUrl + 'as/' + member.id + '/';
-                        view.textContent = '<?php echo esc_js( __( 'View as', 'households' ) ); ?>';
-                        view.title = '<?php echo esc_js( __( 'See the dashboard as this member', 'households' ) ); ?>';
-                        actions.appendChild(view);
-
-                        const select = document.createElement('select');
-                        select.setAttribute('aria-label', '<?php echo esc_js( __( 'Role', 'households' ) ); ?>');
-                        roleOptions(select, member.role);
-                        select.addEventListener('change', () => save({ household_action: 'set_member_role', member_id: member.id, role: select.value }));
-                        actions.appendChild(select);
-
-                        const remove = document.createElement('button');
-                        remove.type = 'button';
-                        remove.className = 'secondary';
-                        remove.textContent = '×';
-                        remove.title = '<?php echo esc_js( __( 'Remove from household', 'households' ) ); ?>';
-                        remove.addEventListener('click', () => {
-                            if (confirm('<?php echo esc_js( __( 'Remove this member from the household? Their account is kept.', 'households' ) ); ?>')) {
-                                save({ household_action: 'remove_member', member_id: member.id });
-                            }
-                        });
-                        actions.appendChild(remove);
+                    if (!isSelf) {
+                        actions.push(hh.el('button', {
+                            class: 'quiet', type: 'button', text: t.remove,
+                            onclick: () => {
+                                if (window.confirm(t.confirm.replace('%s', person.name))) {
+                                    send('remove_person', { person_id: person.id });
+                                }
+                            },
+                        }));
                     }
-                    memberList.appendChild(item);
+
+                    const childBox = hh.el('input', { type: 'checkbox', style: 'width:auto;min-height:0' });
+                    childBox.checked = person.is_child;
+                    childBox.addEventListener('change', () => send('update_person', {
+                        person_id: person.id, is_child: childBox.checked ? 1 : 0, label: person.label,
+                    }));
+
+                    nodes.people.appendChild(hh.el('li', { class: 'row' }, [
+                        hh.el('div', {}, [
+                            hh.el('strong', { text: person.name + (isSelf ? ' (' + t.you + ')' : '') }),
+                            hh.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin:4px 0' }, pills),
+                            hh.el('label', { class: 'inline' }, [childBox, hh.el('span', { class: 'meta', text: t.isChild })]),
+                        ]),
+                        hh.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start' }, actions),
+                    ]));
                 });
-
-                root.querySelectorAll('[data-organiser-only]').forEach((el) => el.hidden = !data.viewer.can_organise);
-                infoList.innerHTML = (data.info || []).length ? '' : '<li class="empty"><?php echo esc_js( __( 'Nothing noted down yet.', 'households' ) ); ?></li>';
-                (data.info || []).forEach((entry, index) => {
-                    const item = document.createElement('li');
-                    item.className = 'item';
-                    item.innerHTML = '<div><div class="title"></div><div class="meta detail"></div></div><div class="member-actions"></div>';
-                    item.querySelector('.title').textContent = entry.label;
-                    item.querySelector('.detail').textContent = entry.detail;
-                    if (data.viewer.can_organise) {
-                        const remove = document.createElement('button');
-                        remove.type = 'button';
-                        remove.className = 'secondary';
-                        remove.textContent = '×';
-                        remove.title = '<?php echo esc_js( __( 'Remove this note', 'households' ) ); ?>';
-                        remove.addEventListener('click', () => save({ household_action: 'remove_household_info', info_index: index }));
-                        item.querySelector('.member-actions').appendChild(remove);
-                    }
-                    infoList.appendChild(item);
-                });
-
-                status.textContent = '';
+                hh.say('');
             }
 
-            function save(payload) {
-                status.textContent = '<?php echo esc_js( __( 'Saving...', 'households' ) ); ?>';
-                request(payload).then(render).catch((error) => status.textContent = error.message);
-            }
-
-            root.querySelectorAll('form[data-action]').forEach((form) => {
-                form.addEventListener('submit', (event) => {
-                    event.preventDefault();
-                    const payload = { household_action: form.dataset.action };
-                    new FormData(form).forEach((value, key) => payload[key] = value);
-                    save(payload);
-                    if (form.dataset.action.indexOf('add_') === 0) {
-                        form.reset();
-                    } else {
-                        form.elements.name.blur();
-                    }
-                });
+            nodes.rename.addEventListener('submit', (event) => {
+                event.preventDefault();
+                send('update_home', { name: nodes.rename.name.value }).then(() => hh.say(t.saved));
             });
 
-            request({ household_action: 'get' }).then(render).catch((error) => status.textContent = error.message);
+            nodes.addPerson.addEventListener('submit', (event) => {
+                event.preventDefault();
+                const form = event.target;
+                send('add_person', {
+                    name: form.name.value,
+                    email: form.email.value,
+                    password: form.password.value,
+                    label: form.label.value,
+                    birthdate: form.birthdate.value,
+                    is_child: form.is_child.checked ? 1 : 0,
+                }).then(() => form.reset());
+            });
+
+            send('get', {});
         })();
     </script>
-
-    <?php wp_app_body_close(); ?>
-</body>
-</html>
+<?php require __DIR__ . '/_foot.php'; ?>
