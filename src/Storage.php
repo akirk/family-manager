@@ -623,6 +623,7 @@ class Storage {
         $where = $this->location_today( $person_id );
         $stay = Whereabouts::stay_ends( $person_id, $today );
         $next = $stay ? $this->get_home( $stay['next_home_id'] ) : [];
+        $said = Whereabouts::home_on( $person_id, $today )['is_override'];
 
         $with = [];
         foreach ( $where['home_id'] ? $this->who_is_here( $where['home_id'] ) : [] as $person ) {
@@ -636,6 +637,9 @@ class Storage {
             'name'        => $where['name'],
             'known'       => $where['known'],
             'rotates'     => (bool) Whereabouts::get_rotation( $person_id ),
+            // Whether today is something you said, as opposed to something a
+            // pattern worked out or a single home made obvious.
+            'said'        => $said,
             'with_you'    => $with,
             'until'       => $stay['until'] ?? '',
             'until_label' => $this->say_date( $stay['until'] ?? '', $today ),
@@ -725,7 +729,8 @@ class Storage {
                 }
                 $previous = null;
                 foreach ( Whereabouts::days_for_person( $person_id, $today, $days + 1 ) as $day ) {
-                    $moved = null !== $previous && $day['home_id'] !== $previous['home_id'];
+                    $moved = null !== $previous && $previous['home_id'] && $day['home_id']
+                        && $day['home_id'] !== $previous['home_id'];
                     $concerns_me = $moved
                         && ( in_array( $day['home_id'], $mine, true ) || in_array( $previous['home_id'], $mine, true ) );
                     if ( $concerns_me ) {
@@ -798,23 +803,16 @@ class Storage {
     /* ---------------------------------------------------------------- Whereabouts */
 
     /**
-     * Where a person is today, as far as this app can honestly say.
-     *
-     * A rotation answers it outright. Without one, someone who belongs to a
-     * single home is at it — there is nowhere else they could be. Someone who
-     * belongs to several and rotates between none of them is simply not
-     * tracked, and saying where they are would be a guess dressed up as an
-     * answer.
+     * Where a person is today, as far as this app can honestly say: what they
+     * said, else what their rotation works out, else the single home they
+     * belong to. Someone who belongs to several and rotates between none is
+     * not tracked, and saying where they are would be a guess dressed up as an
+     * answer — so the app asks them instead.
      *
      * @return array{home_id:int,name:string,known:bool}
      */
     public function location_today( int $person_id ): array {
-        $where = Whereabouts::home_on( $person_id, current_time( 'Y-m-d' ) );
-        $home_id = $where['home_id'];
-        if ( ! $home_id ) {
-            $homes = Access::home_ids_for_person( $person_id );
-            $home_id = 1 === count( $homes ) ? $homes[0] : 0;
-        }
+        $home_id = Whereabouts::home_on( $person_id, current_time( 'Y-m-d' ) )['home_id'];
         $home = $home_id ? $this->get_home( $home_id ) : [];
         return [
             'home_id' => $home_id,
@@ -936,7 +934,11 @@ class Storage {
         foreach ( $people as $person ) {
             $previous = null;
             foreach ( $person['days'] as $day ) {
-                if ( null !== $previous && $day['home_id'] !== $previous['home_id'] ) {
+                // A day nobody can account for is not somewhere to travel from
+                // or to, so it starts no handover.
+                $moved = null !== $previous && $previous['home_id'] && $day['home_id']
+                    && $day['home_id'] !== $previous['home_id'];
+                if ( $moved ) {
                     $key = $day['date'] . ':' . $previous['home_id'] . ':' . $day['home_id'];
                     if ( ! isset( $handovers[ $key ] ) ) {
                         $handovers[ $key ] = [

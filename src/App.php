@@ -296,6 +296,18 @@ class App extends BaseApp {
             wp_send_json_success( $this->storage->get_my_day( $user_id ) );
         }
 
+        // Saying where you are is something anyone may do about themselves,
+        // child or not: it is a statement about your own day rather than a
+        // change to anybody's arrangement. Saying it about someone else is
+        // organising, and stays where it was.
+        if ( 'say_where' === $action ) {
+            $said_home = $post( 'said_home_id', 'int' );
+            $this->assert_allowed( $viewer_person && ( ! $said_home || Access::is_member( $viewer_person, $said_home ) ) );
+            Whereabouts::set_override( $viewer_person, $post( 'date' ) ?: current_time( 'Y-m-d' ), $said_home );
+            Whereabouts::prune_overrides( $viewer_person );
+            wp_send_json_success( $this->storage->get_my_day( $user_id ) );
+        }
+
         if ( 'get_things' === $action ) {
             wp_send_json_success( [
                 'things' => $this->storage->get_things_overview( $user_id ),

@@ -6,13 +6,14 @@
  */
 require __DIR__ . '/_head.php';
 ?>
-        <h1 data-greeting><?php echo esc_html__( 'Your day', 'households' ); ?></h1>
+        <h1><?php echo esc_html__( 'Your day', 'households' ); ?></h1>
         <p class="subtitle"><?php echo esc_html__( 'Where you are, what is yours to do, and what is coming across your homes.', 'households' ); ?></p>
         <div class="status" data-status><?php echo esc_html__( 'Loading…', 'households' ); ?></div>
 
         <section data-today-section hidden>
             <h2><?php echo esc_html__( 'Today', 'households' ); ?></h2>
             <p data-where style="margin:0"></p>
+            <div data-say hidden style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"></div>
         </section>
 
         <section data-yours-section hidden>
@@ -44,12 +45,14 @@ require __DIR__ . '/_head.php';
     <script>
         (function() {
             const t = {
-                greeting: '<?php echo esc_js( __( '%s’s day', 'households' ) ); ?>',
                 atHome: '<?php echo esc_js( __( 'You are at %s today.', 'households' ) ); ?>',
                 untilThen: '<?php echo esc_js( __( 'Until %1$s, then %2$s.', 'households' ) ); ?>',
                 withYou: '<?php echo esc_js( __( 'Here with you: %s.', 'households' ) ); ?>',
                 alone: '<?php echo esc_js( __( 'Nobody else is here today.', 'households' ) ); ?>',
-                untracked: '<?php echo esc_js( __( 'You belong to several homes and rotate between none, so the app cannot say where you are today.', 'households' ) ); ?>',
+                askWhere: '<?php echo esc_js( __( 'Where are you today?', 'households' ) ); ?>',
+                justToday: '<?php echo esc_js( __( 'Nothing says where you are, so nothing is assumed. Answering is about today alone; it sets up no arrangement.', 'households' ) ); ?>',
+                unsayPattern: '<?php echo esc_js( __( 'Back to the pattern', 'households' ) ); ?>',
+                unsay: '<?php echo esc_js( __( 'Not sure', 'households' ) ); ?>',
                 nowhere: '<?php echo esc_js( __( 'You do not belong to a home yet.', 'households' ) ); ?>',
                 noTasks: '<?php echo esc_js( __( 'Nothing is asked of you right now.', 'households' ) ); ?>',
                 overdue: '<?php echo esc_js( __( 'overdue', 'households' ) ); ?>',
@@ -69,8 +72,8 @@ require __DIR__ . '/_head.php';
                 clear: '<?php echo esc_js( __( 'Nothing to do', 'households' ) ); ?>',
             };
             const nodes = {
-                greeting: document.querySelector('[data-greeting]'),
                 where: document.querySelector('[data-where]'),
+                say: document.querySelector('[data-say]'),
                 yours: document.querySelector('[data-yours]'),
                 shared: document.querySelector('[data-shared]'),
                 agenda: document.querySelector('[data-agenda]'),
@@ -88,30 +91,66 @@ require __DIR__ . '/_head.php';
                 });
             }
 
-            /** Where you are, and when that stops being true. */
-            function renderWhere(where) {
+            /** Say where you are today, or take the answer back with a 0. */
+            function say(homeId) {
+                hh.say('');
+                return hh.post('say_where', { said_home_id: homeId })
+                    .then(render).catch((error) => hh.say(error.message, true));
+            }
+
+            /**
+             * Where you are, when that stops being true, and — because the app
+             * would rather ask than guess — the homes you could say instead.
+             */
+            function renderWhere(where, homes) {
                 nodes.where.innerHTML = '';
-                if (!where.known) {
-                    nodes.where.textContent = t.untracked;
+                if (where.known) {
+                    // The home is a link inside the sentence, so the sentence is
+                    // split around its placeholder rather than pasted together.
+                    const parts = t.atHome.split('%s');
+                    nodes.where.appendChild(document.createTextNode(parts[0]));
+                    nodes.where.appendChild(hh.el('a', { href: hh.homeUrl(where.home_id), text: where.name }));
+                    nodes.where.appendChild(document.createTextNode(parts[1] || ''));
+                    if (where.until && where.next_name) {
+                        nodes.where.appendChild(document.createTextNode(' '));
+                        nodes.where.appendChild(hh.el('span', {
+                            class: 'meta',
+                            text: t.untilThen.replace('%1$s', where.until_label).replace('%2$s', where.next_name),
+                        }));
+                    }
+                    nodes.where.appendChild(hh.el('div', {
+                        class: 'meta',
+                        text: where.with_you.length ? t.withYou.replace('%s', where.with_you.join(', ')) : t.alone,
+                    }));
+                } else {
+                    nodes.where.appendChild(hh.el('strong', { text: t.askWhere }));
+                    nodes.where.appendChild(hh.el('div', { class: 'meta', text: t.justToday }));
+                }
+
+                // Belong to one home and there is nothing to ask. Belong to
+                // more and the answer is a button per home, the one you are at
+                // already pressed.
+                nodes.say.innerHTML = '';
+                nodes.say.hidden = homes.length < 2;
+                if (nodes.say.hidden) {
                     return;
                 }
-                // The home is a link inside the sentence, so the sentence is
-                // split around its placeholder rather than pasted together.
-                const parts = t.atHome.split('%s');
-                nodes.where.appendChild(document.createTextNode(parts[0]));
-                nodes.where.appendChild(hh.el('a', { href: hh.homeUrl(where.home_id), text: where.name }));
-                nodes.where.appendChild(document.createTextNode(parts[1] || ''));
-                if (where.until && where.next_name) {
-                    nodes.where.appendChild(document.createTextNode(' '));
-                    nodes.where.appendChild(hh.el('span', {
-                        class: 'meta',
-                        text: t.untilThen.replace('%1$s', where.until_label).replace('%2$s', where.next_name),
+                homes.forEach((home) => {
+                    const current = where.home_id === home.id;
+                    nodes.say.appendChild(hh.el('button', {
+                        type: 'button', text: home.name,
+                        class: current ? 'primary' : '',
+                        'aria-pressed': current ? 'true' : 'false',
+                        onclick: () => say(home.id),
+                    }));
+                });
+                if (where.said) {
+                    nodes.say.appendChild(hh.el('button', {
+                        type: 'button', class: 'quiet',
+                        text: where.rotates ? t.unsayPattern : t.unsay,
+                        onclick: () => say(0),
                     }));
                 }
-                nodes.where.appendChild(hh.el('div', {
-                    class: 'meta',
-                    text: where.with_you.length ? t.withYou.replace('%s', where.with_you.join(', ')) : t.alone,
-                }));
             }
 
             /** A task, tickable from here: the home it lives in comes with it. */
@@ -197,20 +236,17 @@ require __DIR__ . '/_head.php';
             }
 
             function render(data) {
-                if (data.person && data.person.name) {
-                    nodes.greeting.textContent = t.greeting.replace('%s', data.person.name);
-                }
-
                 if (!data.homes.length) {
                     section('today', true);
                     nodes.where.textContent = t.nowhere;
+                    nodes.say.hidden = true;
                     ['yours', 'shared', 'agenda', 'homes'].forEach((name) => section(name, false));
                     hh.say('');
                     return;
                 }
 
                 section('today', true);
-                renderWhere(data.where);
+                renderWhere(data.where, data.homes);
 
                 // An empty list of your own is worth saying; an empty list of
                 // the house's is just a section nobody needs to see.
