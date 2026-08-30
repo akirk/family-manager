@@ -1,0 +1,32 @@
+{
+	"$schema": "https://playground.wordpress.net/blueprint-schema.json",
+	"meta": {
+		"title": "Family Manager (Demo)",
+		"description": "A household dashboard for tasks, appointments and rewards. Every family member gets their own WordPress account and their own view; administrators can open any member's view to check on it. Pre-loaded with a household of one parent and two children so you can explore right away (member accounts use the password \"demo\").",
+		"author": "Alex Kirk",
+		"categories": [
+			"Apps",
+			"Productivity"
+		]
+	},
+	"landingPage": "/family-manager/",
+	"steps": [
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "git:directory",
+				"url": "https://github.com/akirk/family-manager",
+				"ref": "dist/main",
+				"refType": "branch"
+			},
+			"options": {
+				"activate": true,
+				"targetFolderName": "family-manager"
+			}
+		},
+		{
+			"step": "runPHP",
+			"code": "<?php\nrequire_once '/wordpress/wp-load.php';\n\nif ( ! post_type_exists( 'family_household' ) || ! class_exists( '\\\\FamilyManager\\\\Storage' ) ) {\n\treturn;\n}\n\n$admin = get_user_by( 'login', 'admin' );\n$admin_id = $admin ? (int) $admin->ID : 1;\n$storage = new \\FamilyManager\\Storage();\n\n$household_id = $storage->create_household( 'Demo Household', $admin_id );\nif ( ! $household_id ) {\n\treturn;\n}\n\n$parent_id = $storage->add_member( $household_id, 'Sam', \\FamilyManager\\Access::ROLE_PARENT, '', 'demo' );\n$mia_id    = $storage->add_member( $household_id, 'Mia', \\FamilyManager\\Access::ROLE_CHILD, '', 'demo' );\n$ben_id    = $storage->add_member( $household_id, 'Ben', \\FamilyManager\\Access::ROLE_CHILD, '', 'demo' );\n\n$storage->add_task( $household_id, 'Pack school bag', $mia_id, 'task', 5, gmdate( 'Y-m-d' ) );\n$storage->add_task( $household_id, 'Feed the cat', $ben_id, 'task', 5, gmdate( 'Y-m-d' ) );\n$storage->add_task( $household_id, 'Tidy room', $mia_id, 'task', 10, gmdate( 'Y-m-d', strtotime( '+1 day' ) ) );\n$storage->add_task( $household_id, 'Dentist appointment', $ben_id, 'appointment', 0, gmdate( 'Y-m-d', strtotime( '+2 days' ) ) );\n$storage->add_task( $household_id, 'Parent-teacher meeting', $parent_id, 'appointment', 0, gmdate( 'Y-m-d', strtotime( '+4 days' ) ) );\n$storage->add_task( $household_id, 'Book summer camp', 0, 'task', 0, gmdate( 'Y-m-d', strtotime( '+10 days' ) ) );\n\n$storage->add_reward( $household_id, 'Movie night pick', $mia_id, 20 );\n$storage->add_reward( $household_id, 'Extra screen time', 0, 15 );\n$storage->add_reward( $household_id, 'Ice cream outing', $ben_id, 25 );\n\n$storage->add_points( $mia_id, 15 );\n$storage->add_points( $ben_id, 5 );\n"
+		}
+	]
+}

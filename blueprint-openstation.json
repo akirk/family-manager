@@ -1,0 +1,38 @@
+{
+	"$schema": "https://playground.wordpress.net/blueprint-schema.json",
+	"meta": {
+		"title": "Family Manager",
+		"description": "A household dashboard for tasks, appointments and rewards. Every family member gets their own WordPress account and their own view; administrators can open any member's view to check on it.",
+		"author": "Alex Kirk",
+		"categories": [
+			"Apps",
+			"Productivity"
+		]
+	},
+	"landingPage": "/wp-admin/index.php?desktop_mode_portal=1",
+	"steps": [
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "url",
+				"url": "https://github.com/WordPress/openstation/releases/latest/download/openstation.zip"
+			},
+			"options": {
+				"activate": true
+			}
+		},
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "git:directory",
+				"url": "https://github.com/akirk/family-manager",
+				"ref": "dist/main",
+				"refType": "branch"
+			},
+			"options": {
+				"activate": true,
+				"targetFolderName": "family-manager"
+			}
+		}
+	]
+}
