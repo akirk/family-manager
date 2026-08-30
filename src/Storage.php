@@ -39,7 +39,18 @@ class Storage {
         if ( '' === trim( $name ) ) {
             return 0;
         }
-        $term = wp_insert_term( $name, Access::TAXONOMY );
+
+        // Terms are global; the names families give their homes are not. Two
+        // households on one site may both have a "Home", and neither should be
+        // refused — or told the other exists. Only the slug has to be unique,
+        // so it is made unique here and the name is left alone.
+        $slug = wp_unique_term_slug( sanitize_title( $name ), (object) [
+            'taxonomy'   => Access::TAXONOMY,
+            'parent'     => 0,
+            'term_id'    => 0,
+            'term_group' => 0,
+        ] );
+        $term = wp_insert_term( $name, Access::TAXONOMY, $slug ? [ 'slug' => $slug ] : [] );
         if ( is_wp_error( $term ) ) {
             return 0;
         }
@@ -47,6 +58,33 @@ class Storage {
         if ( $admin_user_id ) {
             Access::set_admin( $home_id, $admin_user_id, true );
         }
+        return $home_id;
+    }
+
+    /**
+     * Start a home, with the person starting it inside it and administering it.
+     *
+     * A home with nobody in it is not a home, and one nobody administers cannot
+     * be added to, so both are settled here rather than left as two more steps.
+     * Someone who already has a record joins with it — a second home does not
+     * make a second person.
+     */
+    public function start_home( int $user_id, string $name ): int {
+        $home_id = $this->create_home( $name, $user_id );
+        if ( ! $home_id ) {
+            return 0;
+        }
+
+        $person_id = Access::person_for_user( $user_id );
+        if ( $person_id ) {
+            Access::join( $person_id, $home_id );
+            return $home_id;
+        }
+
+        $user = get_userdata( $user_id );
+        $this->add_person( $home_id, $user ? $user->display_name : '', [
+            'email' => $user ? $user->user_email : '',
+        ] );
         return $home_id;
     }
 

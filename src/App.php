@@ -67,11 +67,13 @@ class App extends BaseApp {
      * Every home has its own address.
      *
      * The literal routes are registered before `{id}`, and `{id}` only matches
-     * digits, so a home can never shadow `where` or `person`.
+     * digits, so a home can never shadow `homes`, `where` or `person`.
      */
     protected function setup_routes(): void {
         // The index: your day, across every home you belong to.
         $this->app->route( '' );
+        // Every home you belong to, and where a new one is started.
+        $this->app->route( 'homes', 'homes.php' );
         // Who is at which home, day by day, across the homes you belong to.
         $this->app->route( 'where', 'where.php' );
         // Everything kept across the homes you belong to, and where it is.
@@ -103,6 +105,7 @@ class App extends BaseApp {
             $this->app->add_menu_item( 'home-' . $home['id'], $home['name'], $base . $home['id'] . '/' );
         }
 
+        $this->app->add_menu_item( 'homes', __( 'Your homes', 'households' ), $base . 'homes/' );
         $this->app->add_menu_item( 'where', __( 'Who is where', 'households' ), $base . 'where/' );
         $this->app->add_menu_item( 'things', __( 'Things', 'households' ), $base . 'things/' );
 
@@ -294,6 +297,16 @@ class App extends BaseApp {
         // resolved: it spans all of them, and belonging to none is an answer.
         if ( 'get_my_day' === $action ) {
             wp_send_json_success( $this->storage->get_my_day( $user_id ) );
+        }
+
+        // The homes page spans homes and is the one place that answers before
+        // you belong to any: it is where the first one is started.
+        if ( 'get_homes' === $action || 'start_home' === $action ) {
+            $started = 'start_home' === $action ? $this->storage->start_home( $user_id, $post( 'name' ) ) : 0;
+            wp_send_json_success( [
+                'homes'   => $this->storage->get_homes_overview( $user_id ),
+                'started' => $started,
+            ] );
         }
 
         // Saying where you are is something anyone may do about themselves,
