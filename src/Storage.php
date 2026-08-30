@@ -555,6 +555,246 @@ class Storage {
         ];
     }
 
+    /* ---------------------------------------------------------------- Your day */
+
+    /** How far ahead the dashboard looks: a fortnight, like the board. */
+    private const AGENDA_DAYS = 14;
+
+    /**
+     * The index, which is about you rather than about your homes.
+     *
+     * Where you are today, what is yours to do wherever it happens to be
+     * written down, and what the fortnight ahead holds. The appointments, the
+     * moves and the birthdays are one dated list rather than three, because a
+     * day is one thing to the person living it even when it is spread across
+     * three houses.
+     */
+    public function get_my_day( int $user_id ): array {
+        $viewer = Access::person_for_user( $user_id );
+        $today = current_time( 'Y-m-d' );
+        $tasks = $this->open_tasks_for( $viewer, $today );
+
+        return [
+            'person' => $this->get_person( $viewer ),
+            'today'  => $today,
+            'where'  => $this->where_person_is( $viewer, $today ),
+            // What is asked of you by name, and what the house has asked of
+            // nobody in particular. What is asked of someone else is theirs.
+            'yours'  => array_values( array_filter( $tasks, static function( array $task ) use ( $viewer ): bool {
+                return $task['person_id'] === $viewer;
+            } ) ),
+            'shared' => array_values( array_filter( $tasks, static function( array $task ): bool {
+                return ! $task['person_id'];
+            } ) ),
+            'agenda' => $this->get_agenda( $user_id, $viewer, $today, self::AGENDA_DAYS ),
+            'homes'  => $this->get_homes_overview( $user_id ),
+        ];
+    }
+
+    /**
+     * Every open task across the homes a person belongs to, each naming the
+     * home it was written down in. Soonest first; undated last.
+     */
+    private function open_tasks_for( int $person_id, string $today ): array {
+        $tasks = [];
+        foreach ( $this->get_homes_for_person( $person_id ) as $home ) {
+            foreach ( $this->get_tasks( $home['id'] ) as $task ) {
+                if ( $task['is_done'] ) {
+                    continue;
+                }
+                $task['home_id'] = $home['id'];
+                $task['home_name'] = $home['name'];
+                $task['is_overdue'] = '' !== $task['due_date'] && $task['due_date'] < $today;
+                $task['due_label'] = $this->say_date( $task['due_date'], $today );
+                $tasks[] = $task;
+            }
+        }
+        usort( $tasks, static function( array $a, array $b ): int {
+            return strcmp( $a['due_date'] ?: '9999-12-31', $b['due_date'] ?: '9999-12-31' );
+        } );
+        return $tasks;
+    }
+
+    /**
+     * Where a person is today, who is under that roof with them, and — if they
+     * rotate — when that stops being true.
+     */
+    private function where_person_is( int $person_id, string $today ): array {
+        $where = $this->location_today( $person_id );
+        $stay = Whereabouts::stay_ends( $person_id, $today );
+        $next = $stay ? $this->get_home( $stay['next_home_id'] ) : [];
+
+        $with = [];
+        foreach ( $where['home_id'] ? $this->who_is_here( $where['home_id'] ) : [] as $person ) {
+            if ( $person['id'] !== $person_id ) {
+                $with[] = $person['name'];
+            }
+        }
+
+        return [
+            'home_id'     => $where['home_id'],
+            'name'        => $where['name'],
+            'known'       => $where['known'],
+            'rotates'     => (bool) Whereabouts::get_rotation( $person_id ),
+            'with_you'    => $with,
+            'until'       => $stay['until'] ?? '',
+            'until_label' => $this->say_date( $stay['until'] ?? '', $today ),
+            'next_id'     => $next['id'] ?? 0,
+            'next_name'   => $next['name'] ?? '',
+        ];
+    }
+
+    /**
+     * The fortnight ahead as one list: what is due, who is moving, and whose
+     * birthday it is, across every home the viewer belongs to.
+     *
+     * @return array[] each entry naming its `kind`, dated and said out loud.
+     */
+    private function get_agenda( int $user_id, int $viewer, string $today, int $days ): array {
+        $horizon = ( new \DateTimeImmutable( $today, new \DateTimeZone( 'UTC' ) ) )
+            ->modify( '+' . $days . ' days' )->format( 'Y-m-d' );
+
+        $entries = array_merge(
+            $this->agenda_due( $user_id, $viewer, $today, $horizon ),
+            $this->agenda_moves( $viewer, $today, $days ),
+            $this->agenda_birthdays( $viewer, $days )
+        );
+
+        usort( $entries, static function( array $a, array $b ): int {
+            return strcmp( $a['date'], $b['date'] ) ?: strcmp( $a['kind'], $b['kind'] );
+        } );
+
+        foreach ( $entries as $index => $entry ) {
+            $entries[ $index ]['when'] = $this->say_date( $entry['date'], $today );
+        }
+        return $entries;
+    }
+
+    /**
+     * Appointments and dated tasks falling inside the window.
+     *
+     * Someone organising a home sees everything written down in it; anyone else
+     * sees what is theirs and what is the house's, which is the rule the home
+     * page itself reads by.
+     */
+    private function agenda_due( int $user_id, int $viewer, string $from, string $until ): array {
+        $entries = [];
+        foreach ( $this->get_homes_for_person( $viewer ) as $home ) {
+            $sees_everything = Access::can_organise( $user_id, $home['id'] );
+            foreach ( $this->get_tasks( $home['id'] ) as $task ) {
+                if ( $task['is_done'] || '' === $task['due_date'] ) {
+                    continue;
+                }
+                if ( $task['due_date'] < $from || $task['due_date'] > $until ) {
+                    continue;
+                }
+                if ( ! $sees_everything && $task['person_id'] && $task['person_id'] !== $viewer ) {
+                    continue;
+                }
+                $entries[] = [
+                    'date'      => $task['due_date'],
+                    'kind'      => 'appointment' === $task['task_type'] ? 'appointment' : 'task',
+                    'title'     => $task['title'],
+                    'who'       => $task['person'],
+                    'home_id'   => $home['id'],
+                    'home_name' => $home['name'],
+                ];
+            }
+        }
+        return $entries;
+    }
+
+    /**
+     * The moves the rotations imply, from the viewer's side of them: the ones
+     * that arrive at or leave one of their homes, and no others. People moving
+     * the same way on the same day are one move, because that is one trip.
+     */
+    private function agenda_moves( int $viewer, string $today, int $days ): array {
+        $mine = Access::home_ids_for_person( $viewer );
+        $moves = [];
+        $seen = [];
+        foreach ( $mine as $home_id ) {
+            foreach ( Access::person_ids_in_home( $home_id ) as $person_id ) {
+                if ( isset( $seen[ $person_id ] ) ) {
+                    continue;
+                }
+                $seen[ $person_id ] = true;
+                $person = $this->get_person( $person_id );
+                if ( ! $person ) {
+                    continue;
+                }
+                $previous = null;
+                foreach ( Whereabouts::days_for_person( $person_id, $today, $days + 1 ) as $day ) {
+                    $moved = null !== $previous && $day['home_id'] !== $previous['home_id'];
+                    $concerns_me = $moved
+                        && ( in_array( $day['home_id'], $mine, true ) || in_array( $previous['home_id'], $mine, true ) );
+                    if ( $concerns_me ) {
+                        $key = $day['date'] . ':' . $previous['home_id'] . ':' . $day['home_id'];
+                        if ( ! isset( $moves[ $key ] ) ) {
+                            $from = $this->get_home( $previous['home_id'] );
+                            $to = $this->get_home( $day['home_id'] );
+                            $moves[ $key ] = [
+                                'date'      => $day['date'],
+                                'kind'      => 'move',
+                                'title'     => '',
+                                'who'       => '',
+                                'people'    => [],
+                                'from_name' => $from['name'] ?? '',
+                                'home_id'   => $to['id'] ?? 0,
+                                'home_name' => $to['name'] ?? '',
+                            ];
+                        }
+                        $moves[ $key ]['people'][] = $person['name'];
+                    }
+                    $previous = $day;
+                }
+            }
+        }
+        return array_values( $moves );
+    }
+
+    /** Birthdays inside the window, each person once however many homes they are in. */
+    private function agenda_birthdays( int $viewer, int $days ): array {
+        $entries = [];
+        $seen = [];
+        foreach ( Access::home_ids_for_person( $viewer ) as $home_id ) {
+            foreach ( $this->get_upcoming_birthdays( $home_id ) as $birthday ) {
+                if ( isset( $seen[ $birthday['id'] ] ) || $birthday['days_until'] > $days ) {
+                    continue;
+                }
+                $seen[ $birthday['id'] ] = true;
+                $entries[] = [
+                    'date'      => $birthday['date'],
+                    'kind'      => 'birthday',
+                    'title'     => $birthday['name'],
+                    'who'       => '',
+                    'turning'   => $birthday['turning'],
+                    'home_id'   => 0,
+                    'home_name' => '',
+                ];
+            }
+        }
+        return $entries;
+    }
+
+    /**
+     * A date as the app says it out loud, in a sentence: today, tomorrow, or
+     * the weekday and the date.
+     */
+    private function say_date( string $date, string $today ): string {
+        if ( '' === $this->normalize_date( $date ) ) {
+            return '';
+        }
+        $utc = new \DateTimeZone( 'UTC' );
+        if ( $date === $today ) {
+            return __( 'today', 'households' );
+        }
+        if ( $date === ( new \DateTimeImmutable( $today, $utc ) )->modify( '+1 day' )->format( 'Y-m-d' ) ) {
+            return __( 'tomorrow', 'households' );
+        }
+        return wp_date( 'D j M', ( new \DateTimeImmutable( $date, $utc ) )->getTimestamp(), $utc );
+    }
+
     /* ---------------------------------------------------------------- Whereabouts */
 
     /**

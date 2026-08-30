@@ -1,5 +1,5 @@
 <?php require __DIR__ . '/_head.php'; ?>
-        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Your homes', 'households' ); ?></a>
+        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Your day', 'households' ); ?></a>
         <h1><?php echo esc_html__( 'Who is where', 'households' ); ?></h1>
         <p class="subtitle"><?php echo esc_html__( 'Everyone across the homes you belong to, and where they are today.', 'households' ); ?></p>
         <div class="status" data-status><?php echo esc_html__( 'Loading…', 'households' ); ?></div>

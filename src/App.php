@@ -70,7 +70,7 @@ class App extends BaseApp {
      * digits, so a home can never shadow `where` or `person`.
      */
     protected function setup_routes(): void {
-        // The index: every home you belong to.
+        // The index: your day, across every home you belong to.
         $this->app->route( '' );
         // Who is at which home, day by day, across the homes you belong to.
         $this->app->route( 'where', 'where.php' );
@@ -90,13 +90,13 @@ class App extends BaseApp {
         $base = home_url( '/' . $this->get_url_path() . '/' );
         $user_id = get_current_user_id();
         if ( ! $user_id ) {
-            $this->app->add_menu_item( 'index', __( 'Your homes', 'households' ), $base );
+            $this->app->add_menu_item( 'index', __( 'Your day', 'households' ), $base );
             return;
         }
 
         $person_id = Access::person_for_user( $user_id );
         $homes = $this->storage->get_homes_for_person( $person_id );
-        $this->app->add_menu_item( 'index', count( $homes ) > 1 ? __( 'Your homes', 'households' ) : __( 'Home', 'households' ), $base );
+        $this->app->add_menu_item( 'index', __( 'Your day', 'households' ), $base );
 
         // Each home is a place you go to, not a mode you switch into.
         foreach ( $homes as $home ) {
@@ -157,9 +157,8 @@ class App extends BaseApp {
     }
 
     /**
-     * Every home is addressed by its term ID, so both of these run before
-     * anything is rendered: one sends a lone householder straight in, the other
-     * turns away a request for a home the viewer does not belong to.
+     * Every home is addressed by its term ID, so a request for one the viewer
+     * does not belong to is turned away before anything is rendered.
      */
     public function route_by_home(): void {
         $path = $this->app_request_path();
@@ -167,23 +166,13 @@ class App extends BaseApp {
             return;
         }
 
-        $user_id = get_current_user_id();
-        $person_id = Access::person_for_user( $user_id );
-        $index = home_url( '/' . $this->get_url_path() . '/' );
-
-        if ( '' === $path ) {
-            $homes = Access::home_ids_for_person( $person_id );
-            if ( 1 === count( $homes ) ) {
-                wp_safe_redirect( $index . $homes[0] . '/' );
-                exit;
-            }
-            return;
-        }
-
         if ( ! preg_match( '#^(\d+)(?:/|$)#', $path, $matches ) ) {
             return;
         }
 
+        $user_id = get_current_user_id();
+        $person_id = Access::person_for_user( $user_id );
+        $index = home_url( '/' . $this->get_url_path() . '/' );
         $home_id = (int) $matches[1];
         if ( ! Access::is_member( $person_id, $home_id ) ) {
             wp_safe_redirect( $index );
@@ -301,8 +290,10 @@ class App extends BaseApp {
             }
         };
 
-        if ( 'get_homes' === $action ) {
-            wp_send_json_success( [ 'homes' => $this->storage->get_homes_overview( $user_id ) ] );
+        // The index is about the viewer, so it is answered before any home is
+        // resolved: it spans all of them, and belonging to none is an answer.
+        if ( 'get_my_day' === $action ) {
+            wp_send_json_success( $this->storage->get_my_day( $user_id ) );
         }
 
         if ( 'get_things' === $action ) {

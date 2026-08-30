@@ -12,7 +12,7 @@ A WordPress app powered by [WpApp](https://github.com/akirk/wp-app) for running 
 
   | | |
   |---|---|
-  | `/households/` | every home you belong to, and who is under each roof today |
+  | `/households/` | your day: where you are, what is yours to do, and the fortnight ahead |
   | `/households/<id>/` | one home: its people, tasks, facts and things |
   | `/households/<id>/manage/` | who is in it, who administers it, what it is called |
   | `/households/<id>/as/<person id>/` | that home as one of its people sees it |
@@ -20,7 +20,9 @@ A WordPress app powered by [WpApp](https://github.com/akirk/wp-app) for running 
   | `/households/things/` | everything kept across your homes, and which house it is at |
   | `/households/person/<person id>/` | a person, and what travels with them between homes |
 
-  Belong to one home and the index takes you straight into it. Ask for a home you do not belong to and you are sent back to the ones you do.
+  Ask for a home you do not belong to and you are sent back to the ones you do.
+
+- **The front page is about you, not about your houses.** A list of homes is a directory; what a person opens the app to ask is what today wants from them. So the index answers that: where you are and who is under that roof with you, what is asked of you by name and what the house has asked of nobody in particular — tickable from here, wherever it happens to be written down — and the fortnight ahead as one dated list. The appointments, the handovers and the birthdays are merged rather than kept in three sections, because a day is one thing to the person living it even when it is spread across three houses. The homes are still there, at the bottom, where you go when you want one of them rather than your day.
 
 - **A person is a post, and the WordPress account is optional.** The record is the person; the login is identity attached to it when they actually need to sign in — `post_author`, or nobody at all. That is how a toddler whose shoe size is worth writing down, or a relative who will never log in, gets to exist here without an account they would never use. Someone with an email gets an account with the `Household Member` role, which can do nothing but log in and open the app; an existing account is linked by email instead.
 
