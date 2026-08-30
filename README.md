@@ -14,4 +14,4 @@ A WordPress app powered by [WpApp](https://github.com/akirk/wp-app) for managing
 - **Administrators can open any member's view** at `/family-manager/member/<user id>/` to check what that member sees and act on their behalf.
 - Tasks and rewards are private posts tagged with a `family_member` term per user; points are user meta.
 
-The demo blueprint (`demo.json`) seeds a household with one parent and two children; their accounts use the password `demo`.
+The demo blueprint (`demo.json`) seeds two homes (two separated parents, a grandparent, and two children who belong to both households); the member accounts use the password `demo`.
