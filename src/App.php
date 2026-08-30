@@ -17,18 +17,20 @@ class App extends BaseApp {
             'launcher'            => true,
             // Owned content: REST reads are gated with the app's capability and
             // OpenStation keeps these menus out of its dock.
-            'post_types'          => [ 'household', 'household_task' ],
-            'taxonomies'          => [ 'household_member' ],
+            'post_types'          => [ Access::PERSON, Storage::FACT, Storage::ITEM, Storage::TASK ],
+            'taxonomies'          => [ Access::TAXONOMY ],
         ] );
 
         $this->storage = new Storage();
 
-        // Members get a WordPress account with this role: enough to log in and
-        // reach the app, nothing else.
+        // People who log in get a WordPress account with this role: enough to
+        // reach the app, nothing else. People who never log in get no account.
         $this->app->add_role( 'member', __( 'Household Member', 'households' ), [ 'read' => true ] );
 
+        Access::init();
+
         add_action( 'init', [ $this, 'register_post_types' ] );
-        add_action( 'template_redirect', [ $this, 'route_by_household' ] );
+        add_action( 'template_redirect', [ $this, 'route_by_home' ] );
         add_filter( 'login_redirect', [ $this, 'redirect_members_to_app' ], 10, 3 );
         add_action( 'wp_ajax_households_dashboard', [ $this, 'handle_dashboard_request' ] );
     }
@@ -65,22 +67,21 @@ class App extends BaseApp {
      * Every home has its own address.
      *
      * The literal routes are registered before `{id}`, and `{id}` only matches
-     * digits, so a home can never shadow `where` or `profile`.
+     * digits, so a home can never shadow `where` or `person`.
      */
     protected function setup_routes(): void {
         // The index: every home you belong to.
         $this->app->route( '' );
         // Who is at which home, day by day, across the homes you belong to.
         $this->app->route( 'where', 'where.php' );
-        // A person, and the things about them that travel between homes. The
-        // var is `user_id` so that `id` always means a home, wherever it appears.
-        $this->app->route( 'profile/{user_id}', 'profile.php' );
-        // One home: its tasks, appointments, members and notes.
+        // A person, and what travels with them between homes.
+        $this->app->route( 'person/{person_id}', 'person.php' );
+        // One home: its people, tasks, facts and things.
         $this->app->route( '{id}', 'home.php' );
-        // Managing that home: members, roles, settings.
+        // Managing that home: who is in it, who administers it, its name.
         $this->app->route( '{id}/manage', 'manage.php' );
-        // That home, seen as one of its members.
-        $this->app->route( '{id}/as/{user_id}', 'home.php' );
+        // That home, seen as one of the people in it.
+        $this->app->route( '{id}/as/{person_id}', 'home.php' );
     }
 
     protected function setup_menu(): void {
@@ -91,44 +92,47 @@ class App extends BaseApp {
             return;
         }
 
-        $households = $this->storage->get_households_for_user( $user_id );
-        $this->app->add_menu_item( 'index', count( $households ) > 1 ? __( 'Your homes', 'households' ) : __( 'Home', 'households' ), $base );
+        $person_id = Access::person_for_user( $user_id );
+        $homes = $this->storage->get_homes_for_person( $person_id );
+        $this->app->add_menu_item( 'index', count( $homes ) > 1 ? __( 'Your homes', 'households' ) : __( 'Home', 'households' ), $base );
 
         // Each home is a place you go to, not a mode you switch into.
-        foreach ( $households as $household ) {
-            $this->app->add_menu_item( 'household-' . $household['id'], $household['name'], $base . $household['id'] . '/' );
+        foreach ( $homes as $home ) {
+            $this->app->add_menu_item( 'home-' . $home['id'], $home['name'], $base . $home['id'] . '/' );
         }
 
         $this->app->add_menu_item( 'where', __( 'Who is where', 'households' ), $base . 'where/' );
 
-        $open = $this->household_in_view( $user_id );
+        $open = $this->home_in_view( $user_id );
         if ( $open && Access::can_manage( $user_id, $open ) ) {
             $this->app->add_menu_item( 'manage', __( 'Manage this home', 'households' ), $base . $open . '/manage/' );
-            foreach ( $this->storage->get_members( $open ) as $member ) {
-                if ( $member['id'] === $user_id ) {
+            foreach ( $this->storage->get_people( $open ) as $person ) {
+                if ( $person['id'] === $person_id ) {
                     continue;
                 }
                 $this->app->add_menu_item(
-                    'view-as-' . $member['id'],
-                    sprintf( __( 'View as %s', 'households' ), $member['name'] ),
-                    $base . $open . '/as/' . $member['id'] . '/'
+                    'view-as-' . $person['id'],
+                    sprintf( __( 'View as %s', 'households' ), $person['name'] ),
+                    $base . $open . '/as/' . $person['id'] . '/'
                 );
             }
         }
 
-        $this->app->add_user_menu_item( 'my-profile', __( 'My profile', 'households' ), $base . 'profile/' . $user_id . '/' );
+        if ( $person_id ) {
+            $this->app->add_user_menu_item( 'me', __( 'My page', 'households' ), $base . 'person/' . $person_id . '/' );
+        }
     }
 
     /**
      * The home the current page is about: the one in the URL, else the last one
      * visited. Used for the menu and for the views that span homes.
      */
-    public function household_in_view( int $user_id ): int {
+    public function home_in_view( int $user_id ): int {
         $from_url = (int) get_query_var( 'id' );
-        if ( $from_url && Access::is_member( $user_id, $from_url ) ) {
+        if ( $from_url && Access::is_member( Access::person_for_user( $user_id ), $from_url ) ) {
             return $from_url;
         }
-        return $this->storage->last_household_id( $user_id );
+        return $this->storage->last_home_id( $user_id );
     }
 
     /**
@@ -150,30 +154,44 @@ class App extends BaseApp {
     }
 
     /**
-     * Every home is addressed by ID, so both of these run before anything is
-     * rendered: one sends a lone householder straight in, the other turns away
-     * a request for a home the viewer does not belong to.
+     * Every home is addressed by its term ID, so both of these run before
+     * anything is rendered: one sends a lone householder straight in, the other
+     * turns away a request for a home the viewer does not belong to.
      */
-    public function route_by_household(): void {
+    public function route_by_home(): void {
         $path = $this->app_request_path();
         if ( null === $path || ! is_user_logged_in() ) {
             return;
         }
 
         $user_id = get_current_user_id();
+        $person_id = Access::person_for_user( $user_id );
         $index = home_url( '/' . $this->get_url_path() . '/' );
 
         if ( '' === $path ) {
-            $households = Access::household_ids_for_user( $user_id );
-            if ( 1 === count( $households ) ) {
-                wp_safe_redirect( $index . $households[0] . '/' );
+            $homes = Access::home_ids_for_person( $person_id );
+            if ( 1 === count( $homes ) ) {
+                wp_safe_redirect( $index . $homes[0] . '/' );
                 exit;
             }
             return;
         }
 
-        if ( preg_match( '#^(\d+)(?:/|$)#', $path, $matches ) && ! Access::is_member( $user_id, (int) $matches[1] ) ) {
+        if ( ! preg_match( '#^(\d+)(?:/|$)#', $path, $matches ) ) {
+            return;
+        }
+
+        $home_id = (int) $matches[1];
+        if ( ! Access::is_member( $person_id, $home_id ) ) {
             wp_safe_redirect( $index );
+            exit;
+        }
+
+        // Managing a home, and looking at it as someone else, are both things
+        // only its administrators do. Turning them away here means the page
+        // never renders controls that every action would refuse anyway.
+        if ( preg_match( '#^\d+/(manage|as)(?:/|$)#', $path ) && ! Access::can_manage( $user_id, $home_id ) ) {
+            wp_safe_redirect( $index . $home_id . '/' );
             exit;
         }
     }
@@ -186,16 +204,49 @@ class App extends BaseApp {
         return $redirect_to;
     }
 
+    /**
+     * A home is a term; everything in it is a post tagged with that term.
+     *
+     * The taxonomy is closed on purpose. Terms are global in a way private
+     * posts are not, and a term named after someone's home would otherwise be
+     * readable through term archives and the REST namespace.
+     */
     public function register_post_types(): void {
-        $post_types = [
-            'household'      => [
-                'singular' => __( 'Household', 'households' ),
-                'plural'   => __( 'Households', 'households' ),
-                'supports' => [ 'title', 'author' ],
+        register_taxonomy( Access::TAXONOMY, [ Access::PERSON, Storage::FACT, Storage::ITEM, Storage::TASK ], [
+            'labels'            => [
+                'name'          => __( 'Homes', 'households' ),
+                'singular_name' => __( 'Home', 'households' ),
             ],
-            'household_task' => [
-                'singular' => __( 'Household Task', 'households' ),
-                'plural'   => __( 'Household Tasks', 'households' ),
+            'public'            => false,
+            'show_ui'           => current_user_can( 'manage_options' ),
+            'show_in_rest'      => false,
+            // Nothing is nested yet, but a flat taxonomy cannot later hold a
+            // flat inside a building without revisiting every query.
+            'hierarchical'      => true,
+            'show_admin_column' => true,
+        ] );
+
+        $post_types = [
+            Access::PERSON => [
+                'singular' => __( 'Person', 'households' ),
+                'plural'   => __( 'People', 'households' ),
+                // The editor holds what is true of someone in prose, and
+                // revisions are how that reads back as a history.
+                'supports' => [ 'title', 'editor', 'revisions', 'author' ],
+            ],
+            Storage::FACT => [
+                'singular' => __( 'House Fact', 'households' ),
+                'plural'   => __( 'House Facts', 'households' ),
+                'supports' => [ 'title', 'editor', 'revisions' ],
+            ],
+            Storage::ITEM => [
+                'singular' => __( 'Item', 'households' ),
+                'plural'   => __( 'Items', 'households' ),
+                'supports' => [ 'title', 'editor', 'revisions' ],
+            ],
+            Storage::TASK => [
+                'singular' => __( 'Task', 'households' ),
+                'plural'   => __( 'Tasks', 'households' ),
                 'supports' => [ 'title', 'page-attributes' ],
             ],
         ];
@@ -216,61 +267,18 @@ class App extends BaseApp {
                 'exclude_from_search' => true,
             ] );
         }
-
-        register_taxonomy( 'household_member', [ 'household_task' ], [
-            'labels'            => [
-                'name'          => __( 'Household Members', 'households' ),
-                'singular_name' => __( 'Household Member', 'households' ),
-            ],
-            'public'            => false,
-            'show_ui'           => current_user_can( 'manage_options' ),
-            'show_in_rest'      => true,
-            'hierarchical'      => false,
-            'show_admin_column' => true,
-        ] );
     }
 
     public function handle_dashboard_request(): void {
         if ( ! is_user_logged_in() ) {
-            wp_send_json_error( [ 'message' => __( 'Please log in to manage your household.', 'households' ) ], 401 );
+            wp_send_json_error( [ 'message' => __( 'Please log in to open your home.', 'households' ) ], 401 );
         }
         check_ajax_referer( 'households_app', 'nonce' );
 
         $user_id = get_current_user_id();
-        $subject_id = isset( $_POST['view_as'] ) ? absint( $_POST['view_as'] ) : 0;
-        $subject_id = $subject_id ?: $user_id;
+        $viewer_person = Access::person_for_user( $user_id );
         $action = isset( $_POST['household_action'] ) ? sanitize_key( wp_unslash( $_POST['household_action'] ) ) : 'get';
 
-        if ( ! Access::can_view_user( $user_id, $subject_id ) ) {
-            wp_send_json_error( [ 'message' => __( 'You do not have access to this member.', 'households' ) ], 403 );
-        }
-
-        if ( 'get_households' === $action ) {
-            wp_send_json_success( [ 'households' => $this->storage->get_households_overview( $user_id ) ] );
-        }
-
-        // The home is named by the page asking. A request that names one the
-        // viewer does not belong to is refused rather than quietly answered
-        // about a different home; only a request that names none at all — the
-        // views that span homes — falls back to the last one visited.
-        if ( isset( $_POST['household_id'] ) && absint( $_POST['household_id'] ) ) {
-            $household_id = absint( $_POST['household_id'] );
-            $this->assert_allowed( Access::is_member( $user_id, $household_id ) );
-        } else {
-            $household_id = $this->storage->last_household_id( $user_id );
-        }
-        if ( ! $household_id ) {
-            wp_send_json_error( [ 'message' => __( 'No household found.', 'households' ) ], 404 );
-        }
-        $this->storage->remember_household( $user_id, $household_id );
-
-        $dashboard = $this->storage->get_dashboard( $user_id, $household_id, $subject_id );
-        if ( empty( $dashboard['household']['id'] ) ) {
-            wp_send_json_error( [ 'message' => __( 'You do not have access to this home.', 'households' ) ], 403 );
-        }
-
-        $can_manage = Access::can_manage( $user_id, $household_id );
-        $can_organise = Access::can_organise( $user_id, $household_id );
         $post = static function( string $key, string $filter = 'text' ) {
             if ( ! isset( $_POST[ $key ] ) ) {
                 return 'int' === $filter ? 0 : '';
@@ -290,35 +298,57 @@ class App extends BaseApp {
             }
         };
 
-        // Profile actions address a member directly rather than a "view as" subject.
-        if ( 'get_profile' === $action || 'save_profile' === $action ) {
-            $member_id = $post( 'member_id', 'int' ) ?: $user_id;
-            $this->assert_allowed( Access::is_member( $member_id, $household_id ) && ( $member_id === $user_id || Access::can_view_user( $user_id, $member_id ) || $can_organise ) );
-            if ( 'save_profile' === $action ) {
-                $fields = [];
-                foreach ( array_keys( Storage::PROFILE_FIELDS ) as $field ) {
-                    $fields[ $field ] = $post( $field, 'raw' );
-                }
-                $this->storage->save_profile( $member_id, $fields );
-            }
-            wp_send_json_success( [
-                'profile'     => $this->storage->get_profile( $member_id, $household_id ),
-                'household'   => $dashboard['household'],
-                'permissions' => [ 'edit' => true ],
-            ] );
+        if ( 'get_homes' === $action ) {
+            wp_send_json_success( [ 'homes' => $this->storage->get_homes_overview( $user_id ) ] );
         }
 
-        // Whereabouts actions answer with the board rather than the dashboard.
+        // The person page addresses someone directly rather than through a home.
+        if ( 'get_person' === $action || 'save_person' === $action ) {
+            $person_id = $post( 'person_id', 'int' ) ?: $viewer_person;
+            $this->assert_allowed( Access::can_view_person( $user_id, $person_id ) );
+            if ( 'save_person' === $action ) {
+                $this->storage->save_person( $person_id, [
+                    'about'     => $post( 'about', 'raw' ),
+                    'birthdate' => $post( 'birthdate' ),
+                ] );
+            }
+            wp_send_json_success( [ 'person' => $this->storage->get_person( $person_id ) ] );
+        }
+
+        // The home is named by the page asking. A request that names one the
+        // viewer does not belong to is refused rather than quietly answered
+        // about a different home; only a request that names none at all — the
+        // views that span homes — falls back to the last one visited.
+        if ( $post( 'home_id', 'int' ) ) {
+            $home_id = $post( 'home_id', 'int' );
+            $this->assert_allowed( Access::is_member( $viewer_person, $home_id ) );
+        } else {
+            $home_id = $this->storage->last_home_id( $user_id );
+        }
+        if ( ! $home_id ) {
+            wp_send_json_error( [ 'message' => __( 'You do not belong to a home yet.', 'households' ) ], 404 );
+        }
+        $this->storage->remember_home( $user_id, $home_id );
+
+        $subject_id = $post( 'view_as', 'int' ) ?: $viewer_person;
+        if ( $subject_id !== $viewer_person ) {
+            $this->assert_allowed( Access::can_view_person( $user_id, $subject_id ) );
+        }
+
+        $can_manage = current_user_can( 'manage_household', $home_id );
+        $can_organise = current_user_can( 'organise_household', $home_id );
+
+        // Whereabouts answers with the board rather than the dashboard.
         if ( in_array( $action, [ 'get_whereabouts', 'save_rotation', 'clear_rotation', 'set_override' ], true ) ) {
             if ( 'get_whereabouts' !== $action ) {
                 $this->assert_allowed( $can_organise );
-                $member_id = $post( 'member_id', 'int' );
-                $this->assert_allowed( $member_id && Access::is_member( $member_id, $household_id ) );
+                $person_id = $post( 'person_id', 'int' );
+                $this->assert_allowed( $person_id && Access::is_member( $person_id, $home_id ) );
 
                 if ( 'save_rotation' === $action ) {
                     $homes = array_map( 'absint', (array) ( isset( $_POST['homes'] ) ? wp_unslash( $_POST['homes'] ) : [] ) );
                     $cycle = array_map( 'absint', (array) ( isset( $_POST['cycle'] ) ? wp_unslash( $_POST['cycle'] ) : [] ) );
-                    Whereabouts::save_rotation( $member_id, [
+                    Whereabouts::save_rotation( $person_id, [
                         'pattern'         => $post( 'pattern', 'key' ),
                         'start_date'      => $post( 'start_date' ),
                         'homes'           => $homes,
@@ -326,77 +356,110 @@ class App extends BaseApp {
                         'cycle'           => $cycle,
                     ] );
                 } elseif ( 'clear_rotation' === $action ) {
-                    Whereabouts::clear_rotation( $member_id );
+                    Whereabouts::clear_rotation( $person_id );
                 } else {
-                    Whereabouts::set_override( $member_id, $post( 'date' ), $post( 'override_household_id', 'int' ) );
-                    Whereabouts::prune_overrides( $member_id );
+                    Whereabouts::set_override( $person_id, $post( 'date' ), $post( 'override_home_id', 'int' ) );
+                    Whereabouts::prune_overrides( $person_id );
                 }
             }
 
             wp_send_json_success( [
-                'household'   => $dashboard['household'],
-                'viewer'      => $dashboard['viewer'],
-                'households'  => $dashboard['households'],
-                'board'       => $this->storage->get_whereabouts_board( $household_id, $post( 'start' ), $post( 'window', 'int' ) ?: 14 ),
+                'board'       => $this->storage->get_whereabouts_board( $home_id, $post( 'start' ), $post( 'window', 'int' ) ?: 14 ),
+                'homes'       => $this->storage->get_homes_for_person( $viewer_person ),
                 'permissions' => [ 'organise' => $can_organise, 'manage' => $can_manage ],
             ] );
         }
 
         switch ( $action ) {
-            case 'update_household':
+            case 'update_home':
                 $this->assert_allowed( $can_manage );
-                $this->storage->update_household( $household_id, [ 'name' => $post( 'name' ) ] );
+                $this->storage->update_home( $home_id, $post( 'name' ) );
                 break;
 
-            case 'add_member':
+            case 'add_person':
                 $this->assert_allowed( $can_manage );
-                $this->storage->add_member( $household_id, $post( 'name' ), $post( 'role', 'key' ) ?: Access::ROLE_CHILD, $post( 'email', 'email' ), $post( 'password', 'raw' ) );
+                $this->storage->add_person( $home_id, $post( 'name' ), [
+                    'email'     => $post( 'email', 'email' ),
+                    'password'  => $post( 'password', 'raw' ),
+                    'is_child'  => (bool) $post( 'is_child', 'int' ),
+                    'label'     => $post( 'label' ),
+                    'birthdate' => $post( 'birthdate' ),
+                ] );
                 break;
 
-            case 'set_member_role':
+            case 'update_person':
                 $this->assert_allowed( $can_manage );
-                $member_id = $post( 'member_id', 'int' );
-                if ( $member_id && Access::is_member( $member_id, $household_id ) && $member_id !== $user_id ) {
-                    Access::set_member_role( $household_id, $member_id, $post( 'role', 'key' ) );
+                $person_id = $post( 'person_id', 'int' );
+                if ( Access::is_member( $person_id, $home_id ) ) {
+                    $this->storage->save_person( $person_id, [
+                        'is_child' => (bool) $post( 'is_child', 'int' ),
+                        'label'    => $post( 'label' ),
+                    ] );
                 }
                 break;
 
-            case 'remove_member':
+            case 'remove_person':
                 $this->assert_allowed( $can_manage );
-                $member_id = $post( 'member_id', 'int' );
-                if ( $member_id && $member_id !== $user_id ) {
-                    $this->storage->remove_member( $household_id, $member_id );
+                $person_id = $post( 'person_id', 'int' );
+                // The record survives leaving; only the membership goes.
+                if ( $person_id && $person_id !== $viewer_person && Access::is_member( $person_id, $home_id ) ) {
+                    Access::leave( $person_id, $home_id );
+                }
+                break;
+
+            case 'set_admin':
+                $this->assert_allowed( $can_manage );
+                $person_id = $post( 'person_id', 'int' );
+                $target_user = Access::user_for_person( $person_id );
+                // An administrator may not drop themselves and leave the home
+                // with nobody who can manage it.
+                if ( $target_user && Access::is_member( $person_id, $home_id ) && $target_user !== $user_id ) {
+                    Access::set_admin( $home_id, $target_user, (bool) $post( 'is_admin', 'int' ) );
                 }
                 break;
 
             case 'add_task':
                 $this->assert_allowed( $can_organise );
-                if ( '' !== $post( 'title' ) ) {
-                    $this->storage->add_task( $household_id, $post( 'title' ), $post( 'member_id', 'int' ), $post( 'task_type', 'key' ) ?: 'task', $post( 'due_date' ) );
-                }
+                $this->storage->add_task( $home_id, $post( 'title' ), $post( 'person_id', 'int' ), $post( 'task_type', 'key' ) ?: 'task', $post( 'due_date' ) );
                 break;
 
             case 'toggle_task':
                 $task_id = $post( 'task_id', 'int' );
-                // Members may tick their own or household-wide tasks; organisers any task.
-                $visible = array_column( $dashboard['tasks'], 'id' );
+                // Anyone may tick what they can see; the dashboard is what they
+                // can see, so that is what is checked against.
+                $visible = array_column( $this->storage->get_dashboard( $user_id, $home_id, $subject_id )['tasks'] ?? [], 'id' );
                 if ( $task_id && ( $can_organise || in_array( $task_id, $visible, true ) ) ) {
-                    $this->storage->toggle_task( $household_id, $task_id, $user_id );
+                    $this->storage->toggle_task( $home_id, $task_id );
                 }
                 break;
 
-            case 'add_household_info':
+            case 'remove_task':
                 $this->assert_allowed( $can_organise );
-                $this->storage->add_household_info( $household_id, $post( 'label' ), $post( 'detail', 'raw' ) );
+                $this->storage->remove_task( $home_id, $post( 'task_id', 'int' ) );
                 break;
 
-            case 'remove_household_info':
+            case 'add_note':
                 $this->assert_allowed( $can_organise );
-                $this->storage->remove_household_info( $household_id, $post( 'info_index', 'int' ) );
+                $this->storage->add_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'title' ), $post( 'detail', 'raw' ) );
+                break;
+
+            case 'update_note':
+                $this->assert_allowed( $can_organise );
+                $this->storage->update_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'note_id', 'int' ), $post( 'title' ), $post( 'detail', 'raw' ) );
+                break;
+
+            case 'remove_note':
+                $this->assert_allowed( $can_organise );
+                $this->storage->remove_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'note_id', 'int' ) );
                 break;
         }
 
-        wp_send_json_success( $this->storage->get_dashboard( $user_id, $household_id, $subject_id ) );
+        wp_send_json_success( $this->storage->get_dashboard( $user_id, $home_id, $subject_id ) );
+    }
+
+    /** Facts and things are the same record; the page says which it is asking about. */
+    private function note_type( string $kind ): string {
+        return 'item' === $kind ? Storage::ITEM : Storage::FACT;
     }
 
     private function assert_allowed( bool $allowed ): void {
