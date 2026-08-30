@@ -65,6 +65,14 @@
         .pill { display: inline-flex; align-items: center; min-height: 26px; padding: 0 8px; border-radius: 999px; background: color-mix(in srgb, var(--fm-accent) 12%, transparent); color: var(--fm-accent-strong); font-size: 0.82rem; font-weight: 700; white-space: nowrap; }
         .empty { color: var(--fm-muted); border: 1px dashed var(--fm-line); border-radius: 6px; padding: 18px; text-align: center; }
 
+        .viewing-as { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 16px; padding: 10px 14px; border-radius: 6px; background: color-mix(in srgb, var(--fm-warm) 14%, transparent); border: 1px solid var(--fm-warm); }
+        .viewing-as a { color: var(--fm-warm); font-weight: 700; }
+        .member-link { color: inherit; text-decoration: none; }
+        .member-link:hover .title { text-decoration: underline; }
+        .member-actions { display: flex; gap: 6px; align-items: center; }
+        .member-actions select { min-height: 32px; width: auto; }
+        .member-actions button { min-height: 32px; padding: 0 8px; }
+        [hidden] { display: none !important; }
         @media (max-width: 860px) {
             .topbar, .grid, .forms { grid-template-columns: 1fr; display: grid; }
             .stats { grid-template-columns: 1fr; }
@@ -78,23 +86,30 @@
         <div class="topbar">
             <div>
                 <h1><?php echo esc_html__( 'Family Manager', 'family-manager' ); ?></h1>
-                <p class="subtitle"><?php echo esc_html__( 'A household dashboard for appointments, recurring tasks, responsibility, and rewards.', 'family-manager' ); ?></p>
+                <p class="subtitle"><?php echo esc_html__( 'A household dashboard for tasks, appointments and rewards. Every member has their own login and their own view.', 'family-manager' ); ?></p>
             </div>
             <div class="status" data-status><?php echo esc_html__( 'Loading household...', 'family-manager' ); ?></div>
         </div>
 
+        <div class="viewing-as" data-viewing-as hidden>
+            <span><?php echo esc_html__( 'Viewing as', 'family-manager' ); ?> <strong data-viewing-name></strong></span>
+            <a href="<?php echo esc_url( home_url( '/family-manager/' ) ); ?>"><?php echo esc_html__( 'Back to my view', 'family-manager' ); ?></a>
+        </div>
         <section class="stats" aria-label="<?php echo esc_attr__( 'Household summary', 'family-manager' ); ?>">
             <div class="stat"><strong data-stat="tasks">0</strong><span><?php echo esc_html__( 'Open tasks', 'family-manager' ); ?></span></div>
             <div class="stat"><strong data-stat="appointments">0</strong><span><?php echo esc_html__( 'Appointments', 'family-manager' ); ?></span></div>
             <div class="stat"><strong data-stat="points">0</strong><span><?php echo esc_html__( 'Reward points', 'family-manager' ); ?></span></div>
         </section>
 
-        <section class="forms">
+        <section class="forms" data-organiser>
             <div class="panel">
-                <h2><?php echo esc_html__( 'Add Child', 'family-manager' ); ?></h2>
+                <h2><?php echo esc_html__( 'Add Member', 'family-manager' ); ?></h2>
                 <form data-action="add_member">
                     <input name="name" required placeholder="<?php echo esc_attr__( 'Name', 'family-manager' ); ?>">
-                    <button type="submit"><?php echo esc_html__( 'Add child', 'family-manager' ); ?></button>
+                    <select name="role" data-roles></select>
+                    <input name="email" type="email" placeholder="<?php echo esc_attr__( 'Email (optional, links an existing account)', 'family-manager' ); ?>">
+                    <input name="password" type="text" autocomplete="off" placeholder="<?php echo esc_attr__( 'Password (optional)', 'family-manager' ); ?>">
+                    <button type="submit"><?php echo esc_html__( 'Create account', 'family-manager' ); ?></button>
                 </form>
             </div>
             <div class="panel">
@@ -117,7 +132,7 @@
                 <h2><?php echo esc_html__( 'Add Reward', 'family-manager' ); ?></h2>
                 <form data-action="add_reward">
                     <input name="title" required placeholder="<?php echo esc_attr__( 'Reward', 'family-manager' ); ?>">
-                    <select name="member_id" data-members><option value="0"><?php echo esc_html__( 'Any child', 'family-manager' ); ?></option></select>
+                    <select name="member_id" data-members><option value="0"><?php echo esc_html__( 'Any member', 'family-manager' ); ?></option></select>
                     <input name="points" type="number" min="0" step="1" value="20" aria-label="<?php echo esc_attr__( 'Points', 'family-manager' ); ?>">
                     <button type="submit"><?php echo esc_html__( 'Add reward', 'family-manager' ); ?></button>
                 </form>
@@ -130,7 +145,7 @@
                 <ul class="task-list" data-tasks></ul>
             </div>
             <div class="panel">
-                <h2><?php echo esc_html__( 'Children and Rewards', 'family-manager' ); ?></h2>
+                <h2><?php echo esc_html__( 'Members', 'family-manager' ); ?></h2>
                 <ul class="member-list" data-members-list></ul>
                 <h2 style="margin-top:18px;"><?php echo esc_html__( 'Reward Ideas', 'family-manager' ); ?></h2>
                 <ul class="reward-list" data-rewards></ul>
@@ -142,6 +157,8 @@
         window.familyManager = <?php echo wp_json_encode( [
             'ajaxUrl' => admin_url( 'admin-ajax.php' ),
             'nonce'   => wp_create_nonce( 'family_manager_app' ),
+            'viewAs'  => (int) get_query_var( 'id' ),
+            'memberUrl' => home_url( '/family-manager/member/' ),
         ] ); ?>;
     </script>
     <script>
@@ -162,6 +179,9 @@
                 const body = new FormData();
                 body.append('action', 'family_manager_dashboard');
                 body.append('nonce', window.familyManager.nonce);
+                if (window.familyManager.viewAs) {
+                    body.append('view_as', window.familyManager.viewAs);
+                }
                 Object.keys(payload || {}).forEach((key) => body.append(key, payload[key]));
 
                 return fetch(window.familyManager.ajaxUrl, {
@@ -171,11 +191,33 @@
                 }).then((response) => response.json());
             }
 
+            const viewingAs = app.querySelector('[data-viewing-as]');
+            const organiser = app.querySelector('[data-organiser]');
+            const roleSelects = app.querySelectorAll('[data-roles]');
+            const roleLabels = {};
+
             function render(data) {
+                Object.assign(roleLabels, data.roles);
+                viewingAs.hidden = !data.permissions.viewing_as_other;
+                viewingAs.querySelector('[data-viewing-name]').textContent = data.subject.name || '';
+                organiser.hidden = !data.permissions.organise;
+                organiser.querySelector('form[data-action="add_member"]').closest('.panel').hidden = !data.permissions.manage;
+
+                roleSelects.forEach((select) => {
+                    if (select.options.length) return;
+                    Object.keys(data.roles).forEach((key) => {
+                        const option = document.createElement('option');
+                        option.value = key;
+                        option.textContent = data.roles[key];
+                        option.selected = key === 'child';
+                        select.appendChild(option);
+                    });
+                });
+
                 const openTasks = data.tasks.filter((task) => task.is_done === '0');
                 stats.tasks.textContent = openTasks.filter((task) => task.task_type !== 'appointment').length;
                 stats.appointments.textContent = openTasks.filter((task) => task.task_type === 'appointment').length;
-                stats.points.textContent = data.members.reduce((sum, member) => sum + parseInt(member.points, 10), 0);
+                stats.points.textContent = data.subject.can_organise ? data.members.reduce((sum, member) => sum + parseInt(member.points, 10), 0) : parseInt(data.subject.points, 10);
 
                 memberSelects.forEach((select) => {
                     const first = select.querySelector('option');
@@ -201,13 +243,44 @@
                     taskList.appendChild(item);
                 });
 
-                memberList.innerHTML = data.members.length ? '' : '<li class="empty"><?php echo esc_js( __( 'Add children to assign tasks and rewards.', 'family-manager' ) ); ?></li>';
+                memberList.innerHTML = data.members.length ? '' : '<li class="empty"><?php echo esc_js( __( 'Add members to assign tasks and rewards.', 'family-manager' ) ); ?></li>';
                 data.members.forEach((member) => {
                     const item = document.createElement('li');
+                    const isSelf = member.id === data.viewer.id;
                     item.className = 'item';
-                    item.innerHTML = '<div></div><div><div class="title"></div><div class="meta"><?php echo esc_js( __( 'Child', 'family-manager' ) ); ?></div></div><span class="pill"></span>';
+                    item.innerHTML = '<div class="member-actions"></div><a class="member-link"><div class="title"></div><div class="meta"></div></a><span class="pill"></span>';
                     item.querySelector('.title').textContent = member.name;
+                    item.querySelector('.meta').textContent = member.role_label + ' · @' + member.login;
                     item.querySelector('.pill').textContent = member.points + ' pts';
+                    const link = item.querySelector('.member-link');
+                    if (data.permissions.manage && !isSelf) {
+                        link.href = window.familyManager.memberUrl + member.id + '/';
+                        link.title = '<?php echo esc_js( __( 'View the app as this member', 'family-manager' ) ); ?>';
+                    }
+                    if (data.permissions.manage && !isSelf && !data.permissions.viewing_as_other) {
+                        const actions = item.querySelector('.member-actions');
+                        const select = document.createElement('select');
+                        Object.keys(roleLabels).forEach((key) => {
+                            const option = document.createElement('option');
+                            option.value = key;
+                            option.textContent = roleLabels[key];
+                            option.selected = key === member.role;
+                            select.appendChild(option);
+                        });
+                        select.addEventListener('change', () => save({ family_action: 'set_member_role', member_id: member.id, role: select.value }));
+                        const remove = document.createElement('button');
+                        remove.type = 'button';
+                        remove.className = 'secondary';
+                        remove.textContent = '×';
+                        remove.title = '<?php echo esc_js( __( 'Remove from household', 'family-manager' ) ); ?>';
+                        remove.addEventListener('click', () => {
+                            if (confirm('<?php echo esc_js( __( 'Remove this member from the household? Their account is kept.', 'family-manager' ) ); ?>')) {
+                                save({ family_action: 'remove_member', member_id: member.id });
+                            }
+                        });
+                        actions.appendChild(select);
+                        actions.appendChild(remove);
+                    }
                     memberList.appendChild(item);
                 });
 
@@ -217,12 +290,12 @@
                     item.className = 'item';
                     item.innerHTML = '<div></div><div><div class="title"></div><div class="meta"></div></div><span class="pill"></span>';
                     item.querySelector('.title').textContent = reward.title;
-                    item.querySelector('.meta').textContent = reward.member_name || '<?php echo esc_js( __( 'Any child', 'family-manager' ) ); ?>';
+                    item.querySelector('.meta').textContent = reward.member_name || '<?php echo esc_js( __( 'Any member', 'family-manager' ) ); ?>';
                     item.querySelector('.pill').textContent = reward.points + ' pts';
                     rewardList.appendChild(item);
                 });
 
-                status.textContent = data.household.name;
+                status.textContent = data.household.name + (data.permissions.viewing_as_other ? '' : ' · ' + data.viewer.role_label);
             }
 
             function load() {

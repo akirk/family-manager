@@ -23,6 +23,10 @@ class App extends BaseApp {
 
         $this->storage = new Storage();
 
+        // Members get a WordPress account with this role: enough to log in and
+        // reach the app, nothing else.
+        $this->app->add_role( 'member', __( 'Family Member', 'family-manager' ), [ 'read' => true ] );
+
         add_action( 'init', [ $this, 'register_post_types' ] );
         add_action( 'wp_ajax_family_manager_dashboard', [ $this, 'handle_dashboard_request' ] );
     }
@@ -57,6 +61,8 @@ class App extends BaseApp {
 
     protected function setup_routes(): void {
         $this->app->route( '' );
+        // A household administrator viewing the app as one of its members.
+        $this->app->route( 'member/{id}', 'index.php' );
     }
 
     protected function setup_menu(): void {
@@ -120,49 +126,97 @@ class App extends BaseApp {
         if ( ! is_user_logged_in() ) {
             wp_send_json_error( [ 'message' => __( 'Please log in to manage your household.', 'family-manager' ) ], 401 );
         }
-
         check_ajax_referer( 'family_manager_app', 'nonce' );
 
         $user_id = get_current_user_id();
+        $subject_id = isset( $_POST['view_as'] ) ? absint( $_POST['view_as'] ) : 0;
+        $subject_id = $subject_id ?: $user_id;
         $action = isset( $_POST['family_action'] ) ? sanitize_key( wp_unslash( $_POST['family_action'] ) ) : 'get';
-        $dashboard = $this->storage->get_dashboard( $user_id );
-        $household_id = (int) $dashboard['household']['id'];
 
-        if ( ! $this->storage->user_can_access_household( $user_id, $household_id ) ) {
-            wp_send_json_error( [ 'message' => __( 'You do not have access to this household.', 'family-manager' ) ], 403 );
+        if ( ! Access::can_view_user( $user_id, $subject_id ) ) {
+            wp_send_json_error( [ 'message' => __( 'You do not have access to this member.', 'family-manager' ) ], 403 );
         }
 
-        if ( 'add_member' === $action ) {
-            $name = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
-            if ( '' !== $name ) {
-                $this->storage->add_member( $household_id, $name );
-            }
-        } elseif ( 'add_task' === $action ) {
-            $title = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
-            $member_id = isset( $_POST['member_id'] ) ? absint( $_POST['member_id'] ) : 0;
-            $task_type = isset( $_POST['task_type'] ) ? sanitize_key( wp_unslash( $_POST['task_type'] ) ) : 'task';
-            $points = isset( $_POST['points'] ) ? absint( $_POST['points'] ) : 0;
-            $due_date = isset( $_POST['due_date'] ) ? sanitize_text_field( wp_unslash( $_POST['due_date'] ) ) : '';
-
-            if ( '' !== $title ) {
-                $this->storage->add_task( $household_id, $title, $member_id, $task_type, $points, $due_date );
-            }
-        } elseif ( 'toggle_task' === $action ) {
-            $task_id = isset( $_POST['task_id'] ) ? absint( $_POST['task_id'] ) : 0;
-            if ( $task_id ) {
-                $this->storage->toggle_task( $household_id, $task_id );
-            }
-        } elseif ( 'add_reward' === $action ) {
-            $title = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
-            $member_id = isset( $_POST['member_id'] ) ? absint( $_POST['member_id'] ) : 0;
-            $points = isset( $_POST['points'] ) ? absint( $_POST['points'] ) : 0;
-
-            if ( '' !== $title ) {
-                $this->storage->add_reward( $household_id, $title, $member_id, $points );
-            }
+        $dashboard = $this->storage->get_dashboard( $user_id, $subject_id );
+        $household_id = isset( $dashboard['household']['id'] ) ? (int) $dashboard['household']['id'] : 0;
+        if ( ! $household_id ) {
+            wp_send_json_error( [ 'message' => __( 'No household found.', 'family-manager' ) ], 404 );
         }
 
-        wp_send_json_success( $this->storage->get_dashboard( $user_id ) );
+        $can_manage = Access::can_manage( $user_id, $household_id );
+        $can_organise = Access::can_organise( $user_id, $household_id );
+        $post = static function( string $key, string $filter = 'text' ) {
+            if ( ! isset( $_POST[ $key ] ) ) {
+                return 'int' === $filter ? 0 : '';
+            }
+            $value = wp_unslash( $_POST[ $key ] );
+            switch ( $filter ) {
+                case 'int':
+                    return absint( $value );
+                case 'key':
+                    return sanitize_key( $value );
+                case 'email':
+                    return sanitize_email( $value );
+                case 'raw':
+                    return (string) $value;
+                default:
+                    return sanitize_text_field( $value );
+            }
+        };
+
+        switch ( $action ) {
+            case 'add_member':
+                $this->assert_allowed( $can_manage );
+                $this->storage->add_member( $household_id, $post( 'name' ), $post( 'role', 'key' ) ?: Access::ROLE_CHILD, $post( 'email', 'email' ), $post( 'password', 'raw' ) );
+                break;
+
+            case 'set_member_role':
+                $this->assert_allowed( $can_manage );
+                $member_id = $post( 'member_id', 'int' );
+                if ( $member_id && Access::is_member( $member_id, $household_id ) && $member_id !== $user_id ) {
+                    Access::set_member_role( $household_id, $member_id, $post( 'role', 'key' ) );
+                }
+                break;
+
+            case 'remove_member':
+                $this->assert_allowed( $can_manage );
+                $member_id = $post( 'member_id', 'int' );
+                if ( $member_id && $member_id !== $user_id ) {
+                    $this->storage->remove_member( $household_id, $member_id );
+                }
+                break;
+
+            case 'add_task':
+                $this->assert_allowed( $can_organise );
+                if ( '' !== $post( 'title' ) ) {
+                    $this->storage->add_task( $household_id, $post( 'title' ), $post( 'member_id', 'int' ), $post( 'task_type', 'key' ) ?: 'task', $post( 'points', 'int' ), $post( 'due_date' ) );
+                }
+                break;
+
+            case 'toggle_task':
+                $task_id = $post( 'task_id', 'int' );
+                // Members may tick their own or household-wide tasks; organisers any task.
+                $visible = array_column( $dashboard['tasks'], 'id' );
+                if ( $task_id && ( $can_organise || in_array( $task_id, $visible, true ) ) ) {
+                    $this->storage->toggle_task( $household_id, $task_id, $user_id );
+                }
+                break;
+
+            case 'add_reward':
+                $this->assert_allowed( $can_organise );
+                if ( '' !== $post( 'title' ) ) {
+                    $this->storage->add_reward( $household_id, $post( 'title' ), $post( 'member_id', 'int' ), $post( 'points', 'int' ) );
+                }
+                break;
+        }
+
+        wp_send_json_success( $this->storage->get_dashboard( $user_id, $subject_id ) );
+    }
+
+    private function assert_allowed( bool $allowed ): void {
+        if ( ! $allowed ) {
+            wp_send_json_error( [ 'message' => __( 'You are not allowed to do that.', 'family-manager' ) ], 403 );
+        }
     }
 
     public function activate(): void {

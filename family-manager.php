@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Family Manager
  * Description: A WpApp household dashboard for family tasks, appointments, and rewards.
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Alex Kirk
  * Text Domain: family-manager
  * Tested up to: 7.1
