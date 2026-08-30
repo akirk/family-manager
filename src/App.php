@@ -17,7 +17,7 @@ class App extends BaseApp {
             'launcher'            => true,
             // Owned content: REST reads are gated with the app's capability and
             // OpenStation keeps these menus out of its dock.
-            'post_types'          => [ 'household', 'household_task', 'household_reward' ],
+            'post_types'          => [ 'household', 'household_task' ],
             'taxonomies'          => [ 'household_member' ],
         ] );
 
@@ -188,19 +188,14 @@ class App extends BaseApp {
 
     public function register_post_types(): void {
         $post_types = [
-            'household' => [
+            'household'      => [
                 'singular' => __( 'Household', 'households' ),
                 'plural'   => __( 'Households', 'households' ),
                 'supports' => [ 'title', 'author' ],
             ],
-            'household_task'      => [
+            'household_task' => [
                 'singular' => __( 'Household Task', 'households' ),
                 'plural'   => __( 'Household Tasks', 'households' ),
-                'supports' => [ 'title', 'page-attributes' ],
-            ],
-            'household_reward'    => [
-                'singular' => __( 'Household Reward', 'households' ),
-                'plural'   => __( 'Household Rewards', 'households' ),
                 'supports' => [ 'title', 'page-attributes' ],
             ],
         ];
@@ -222,7 +217,7 @@ class App extends BaseApp {
             ] );
         }
 
-        register_taxonomy( 'household_member', [ 'household_task', 'household_reward' ], [
+        register_taxonomy( 'household_member', [ 'household_task' ], [
             'labels'            => [
                 'name'          => __( 'Household Members', 'households' ),
                 'singular_name' => __( 'Household Member', 'households' ),
@@ -276,7 +271,6 @@ class App extends BaseApp {
 
         $can_manage = Access::can_manage( $user_id, $household_id );
         $can_organise = Access::can_organise( $user_id, $household_id );
-        $rewards_enabled = $this->storage->rewards_enabled( $household_id );
         $post = static function( string $key, string $filter = 'text' ) {
             if ( ! isset( $_POST[ $key ] ) ) {
                 return 'int' === $filter ? 0 : '';
@@ -351,10 +345,7 @@ class App extends BaseApp {
         switch ( $action ) {
             case 'update_household':
                 $this->assert_allowed( $can_manage );
-                $this->storage->update_household( $household_id, [
-                    'name'            => $post( 'name' ),
-                    'rewards_enabled' => '1' === $post( 'rewards_enabled', 'key' ),
-                ] );
+                $this->storage->update_household( $household_id, [ 'name' => $post( 'name' ) ] );
                 break;
 
             case 'add_member':
@@ -381,9 +372,7 @@ class App extends BaseApp {
             case 'add_task':
                 $this->assert_allowed( $can_organise );
                 if ( '' !== $post( 'title' ) ) {
-                    // Points only mean something when the household uses rewards.
-                    $points = $rewards_enabled ? $post( 'points', 'int' ) : 0;
-                    $this->storage->add_task( $household_id, $post( 'title' ), $post( 'member_id', 'int' ), $post( 'task_type', 'key' ) ?: 'task', $points, $post( 'due_date' ) );
+                    $this->storage->add_task( $household_id, $post( 'title' ), $post( 'member_id', 'int' ), $post( 'task_type', 'key' ) ?: 'task', $post( 'due_date' ) );
                 }
                 break;
 
@@ -404,13 +393,6 @@ class App extends BaseApp {
             case 'remove_household_info':
                 $this->assert_allowed( $can_organise );
                 $this->storage->remove_household_info( $household_id, $post( 'info_index', 'int' ) );
-                break;
-
-            case 'add_reward':
-                $this->assert_allowed( $can_organise && $rewards_enabled );
-                if ( '' !== $post( 'title' ) ) {
-                    $this->storage->add_reward( $household_id, $post( 'title' ), $post( 'member_id', 'int' ), $post( 'points', 'int' ) );
-                }
                 break;
         }
 

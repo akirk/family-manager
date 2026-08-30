@@ -3,12 +3,12 @@
 namespace Households;
 
 /**
- * Persistence for households, members, tasks and rewards.
+ * Persistence for households, members and tasks.
  *
  * Members are WordPress users. Each member also has a `household_member` term
- * (slug `user-<id>`) which is only used to tag tasks and rewards with the
- * member they are assigned to; everything else about a member lives in user
- * meta and in the household's membership map (see Access).
+ * (slug `user-<id>`) which is only used to tag tasks with the member they are
+ * assigned to; everything else about a member lives in user meta and in the
+ * household's membership map (see Access).
  */
 class Storage {
     public const MEMBER_TAXONOMY = 'household_member';
@@ -16,9 +16,6 @@ class Storage {
 
     public const META_HOUSEHOLD_ID = '_households_household_id';
     public const META_USER_ID      = '_households_user_id';
-    public const META_POINTS       = '_households_points';
-    /** Household setting: whether tasks earn points and rewards are shown. Off by default. */
-    public const META_REWARDS      = '_households_rewards_enabled';
 
     /* ---------------------------------------------------------------- Households */
 
@@ -132,9 +129,9 @@ class Storage {
     }
 
     /**
-     * Rename a household and switch its optional features on or off.
+     * Rename a household.
      *
-     * @param array{name?:string,rewards_enabled?:bool} $settings
+     * @param array{name?:string} $settings
      */
     public function update_household( int $household_id, array $settings ): void {
         if ( ! $this->format_household( $household_id ) ) {
@@ -143,13 +140,6 @@ class Storage {
         if ( isset( $settings['name'] ) && '' !== trim( $settings['name'] ) ) {
             wp_update_post( [ 'ID' => $household_id, 'post_title' => trim( $settings['name'] ) ] );
         }
-        if ( isset( $settings['rewards_enabled'] ) ) {
-            update_post_meta( $household_id, self::META_REWARDS, $settings['rewards_enabled'] ? '1' : '0' );
-        }
-    }
-
-    public function rewards_enabled( int $household_id ): bool {
-        return '1' === get_post_meta( $household_id, self::META_REWARDS, true );
     }
 
     /* ---------------------------------------------------------------- Dashboard */
@@ -184,15 +174,12 @@ class Storage {
         }
 
         $tasks = $this->get_tasks( $household_id );
-        $rewards = $this->get_rewards( $household_id );
 
         // Children only see what is theirs or shared with the whole household.
         if ( ! Access::can_organise( $subject_id, $household_id ) ) {
-            $mine = static function( array $item ) use ( $subject_id ): bool {
-                return 0 === $item['member_id'] || $item['member_id'] === $subject_id;
-            };
-            $tasks = array_values( array_filter( $tasks, $mine ) );
-            $rewards = array_values( array_filter( $rewards, $mine ) );
+            $tasks = array_values( array_filter( $tasks, static function( array $task ) use ( $subject_id ): bool {
+                return 0 === $task['member_id'] || $task['member_id'] === $subject_id;
+            } ) );
         }
 
         return [
@@ -211,7 +198,6 @@ class Storage {
             'whereabouts' => $this->get_whereabouts_summary( $household_id ),
             'info'        => $this->get_household_info( $household_id ),
             'tasks'       => $tasks,
-            'rewards'     => $rewards,
         ];
     }
 
@@ -228,7 +214,6 @@ class Storage {
             'whereabouts' => [ 'members' => [], 'next_handoff' => null ],
             'info'        => [],
             'tasks'       => [],
-            'rewards'     => [],
         ];
     }
 
@@ -293,9 +278,6 @@ class Storage {
 
         Access::set_member_role( $household_id, $user_id, $role );
         $this->get_or_create_member_term( $user_id );
-        if ( '' === get_user_meta( $user_id, self::META_POINTS, true ) ) {
-            update_user_meta( $user_id, self::META_POINTS, 0 );
-        }
 
         return $user_id;
     }
@@ -324,12 +306,6 @@ class Storage {
         }
         update_term_meta( (int) $inserted['term_id'], self::META_USER_ID, $user_id );
         return (int) $inserted['term_id'];
-    }
-
-    public function add_points( int $user_id, int $delta ): int {
-        $points = (int) get_user_meta( $user_id, self::META_POINTS, true ) + $delta;
-        update_user_meta( $user_id, self::META_POINTS, $points );
-        return $points;
     }
 
     /* ---------------------------------------------------------------- Profiles */
@@ -722,7 +698,7 @@ class Storage {
         return $tasks;
     }
 
-    public function add_task( int $household_id, string $title, int $member_id = 0, string $task_type = 'task', int $points = 0, string $due_date = '' ): int {
+    public function add_task( int $household_id, string $title, int $member_id = 0, string $task_type = 'task', string $due_date = '' ): int {
         $member_id = $this->normalize_member_id( $household_id, $member_id );
         $task_id = wp_insert_post( [
             'post_author' => $this->get_household_owner_user_id( $household_id ),
@@ -738,7 +714,6 @@ class Storage {
 
         update_post_meta( $task_id, self::META_HOUSEHOLD_ID, $household_id );
         update_post_meta( $task_id, '_households_task_type', in_array( $task_type, [ 'task', 'appointment' ], true ) ? $task_type : 'task' );
-        update_post_meta( $task_id, self::META_POINTS, $points );
         update_post_meta( $task_id, '_households_due_date', $this->normalize_date( $due_date ) );
         update_post_meta( $task_id, '_households_is_done', 0 );
         $this->assign_member( $task_id, $member_id );
@@ -761,41 +736,7 @@ class Storage {
         update_post_meta( $task_id, '_households_completed_at', $is_done ? current_time( 'mysql' ) : '' );
         update_post_meta( $task_id, '_households_completed_by', $is_done ? $actor_id : 0 );
 
-        $member_id = $this->get_assigned_member_id( $task_id );
-        $points = (int) get_post_meta( $task_id, self::META_POINTS, true );
-        if ( $member_id && $points ) {
-            $this->add_points( $member_id, $is_done ? $points : -1 * $points );
-        }
-
         return true;
-    }
-
-    /* ---------------------------------------------------------------- Rewards */
-
-    public function get_rewards( int $household_id ): array {
-        return array_map( [ $this, 'format_reward' ], $this->get_related_posts( $household_id, 'household_reward' ) );
-    }
-
-    public function add_reward( int $household_id, string $title, int $member_id = 0, int $points = 0 ): int {
-        $member_id = $this->normalize_member_id( $household_id, $member_id );
-        $reward_id = wp_insert_post( [
-            'post_author' => $this->get_household_owner_user_id( $household_id ),
-            'post_parent' => $household_id,
-            'post_status' => 'private',
-            'post_title'  => $title,
-            'post_type'   => 'household_reward',
-        ], true );
-
-        if ( is_wp_error( $reward_id ) ) {
-            return 0;
-        }
-
-        update_post_meta( $reward_id, self::META_HOUSEHOLD_ID, $household_id );
-        update_post_meta( $reward_id, self::META_POINTS, $points );
-        update_post_meta( $reward_id, '_households_redeemed_at', '' );
-        $this->assign_member( $reward_id, $member_id );
-
-        return (int) $reward_id;
     }
 
     /* ---------------------------------------------------------------- Formatting */
@@ -820,10 +761,9 @@ class Storage {
             return [];
         }
         return [
-            'id'              => $household_id,
-            'name'            => $household->post_title,
-            'created_at'      => $household->post_date,
-            'rewards_enabled' => $this->rewards_enabled( $household_id ),
+            'id'         => $household_id,
+            'name'       => $household->post_title,
+            'created_at' => $household->post_date,
         ];
     }
 
@@ -841,7 +781,6 @@ class Storage {
             'role'         => $role,
             'role_label'   => Access::roles()[ $role ] ?? '',
             'can_organise' => Access::can_organise( $user_id, $household_id ),
-            'points'       => (string) (int) get_user_meta( $user_id, self::META_POINTS, true ),
         ];
     }
 
@@ -855,23 +794,8 @@ class Storage {
             'member_name'  => $member ? $member->display_name : '',
             'title'        => get_post_field( 'post_title', $task_id ),
             'task_type'    => get_post_meta( $task_id, '_households_task_type', true ) ?: 'task',
-            'points'       => (string) (int) get_post_meta( $task_id, self::META_POINTS, true ),
             'due_date'     => get_post_meta( $task_id, '_households_due_date', true ),
             'is_done'      => (string) (int) get_post_meta( $task_id, '_households_is_done', true ),
-        ];
-    }
-
-    private function format_reward( int $reward_id ): array {
-        $member_id = $this->get_assigned_member_id( $reward_id );
-        $member = $member_id ? get_userdata( $member_id ) : null;
-        return [
-            'id'           => $reward_id,
-            'household_id' => (int) get_post_meta( $reward_id, self::META_HOUSEHOLD_ID, true ),
-            'member_id'    => $member_id,
-            'member_name'  => $member ? $member->display_name : '',
-            'title'        => get_post_field( 'post_title', $reward_id ),
-            'points'       => (string) (int) get_post_meta( $reward_id, self::META_POINTS, true ),
-            'redeemed_at'  => get_post_meta( $reward_id, '_households_redeemed_at', true ),
         ];
     }
 

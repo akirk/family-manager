@@ -54,9 +54,6 @@
         .panel h2 { margin: 0 0 12px; font-size: 1.05rem; }
         .panel p.hint { margin: -6px 0 12px; color: var(--fm-muted); font-size: 0.9rem; }
         form { display: grid; gap: 8px; }
-        label.check { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; }
-        label.check input { margin-top: 5px; }
-        label.check small { display: block; color: var(--fm-muted); }
         .member-list, .info-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
         .info-list .detail { white-space: pre-wrap; word-break: break-word; }
         .add-info { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 8px; margin-top: 12px; }
@@ -91,7 +88,6 @@
             <div class="stat"><strong data-stat="members">0</strong><span><?php echo esc_html__( 'Members', 'households' ); ?></span></div>
             <div class="stat"><strong data-stat="tasks">0</strong><span><?php echo esc_html__( 'Open tasks', 'households' ); ?></span></div>
             <div class="stat"><strong data-stat="appointments">0</strong><span><?php echo esc_html__( 'Appointments', 'households' ); ?></span></div>
-            <div class="stat" data-rewards-only hidden><strong data-stat="points">0</strong><span><?php echo esc_html__( 'Reward points', 'households' ); ?></span></div>
         </section>
 
         <section class="grid">
@@ -127,10 +123,6 @@
                     <h2><?php echo esc_html__( 'Settings', 'households' ); ?></h2>
                     <form data-action="update_household" data-settings>
                         <input name="name" required aria-label="<?php echo esc_attr__( 'Household name', 'households' ); ?>">
-                        <label class="check">
-                            <input type="checkbox" name="rewards_enabled" value="1">
-                            <span><?php echo esc_html__( 'Use points and rewards', 'households' ); ?><small><?php echo esc_html__( 'Tasks earn points that members can trade for rewards. Leave this off if you just want a shared to-do list.', 'households' ); ?></small></span>
-                        </label>
                         <button type="submit"><?php echo esc_html__( 'Save settings', 'households' ); ?></button>
                     </form>
                 </div>
@@ -189,7 +181,6 @@
 
             function render(data) {
                 Object.assign(roleLabels, data.roles);
-                const rewards = !!data.household.rewards_enabled;
 
                 root.querySelector('[data-name]').textContent = data.household.name;
                 root.querySelector('[data-subtitle]').textContent = data.permissions.manage
@@ -201,8 +192,6 @@
                 root.querySelector('[data-stat="members"]').textContent = data.members.length;
                 root.querySelector('[data-stat="tasks"]').textContent = openTasks.filter((task) => task.task_type !== 'appointment').length;
                 root.querySelector('[data-stat="appointments"]').textContent = openTasks.filter((task) => task.task_type === 'appointment').length;
-                root.querySelector('[data-stat="points"]').textContent = data.members.reduce((sum, member) => sum + parseInt(member.points, 10), 0);
-                root.querySelectorAll('[data-rewards-only]').forEach((el) => el.hidden = !rewards);
 
                 manage.hidden = !data.permissions.manage;
                 if (!roleSelect.options.length) {
@@ -210,7 +199,6 @@
                 }
                 if (document.activeElement === null || !settings.contains(document.activeElement)) {
                     settings.elements.name.value = data.household.name;
-                    settings.elements.rewards_enabled.checked = rewards;
                 }
 
                 memberList.innerHTML = data.members.length ? '' : '<li class="empty"><?php echo esc_js( __( 'No members yet.', 'households' ) ); ?></li>';
@@ -220,7 +208,7 @@
                     item.className = 'item';
                     item.innerHTML = '<div><div class="title"></div><div class="meta"></div></div><div class="member-actions"></div>';
                     item.querySelector('.title').textContent = member.name + (isSelf ? ' (<?php echo esc_js( __( 'you', 'households' ) ); ?>)' : '');
-                    item.querySelector('.meta').textContent = [member.role_label, '@' + member.login].concat(rewards ? [member.points + ' <?php echo esc_js( __( 'pts', 'households' ) ); ?>'] : []).join(' · ');
+                    item.querySelector('.meta').textContent = [member.role_label, '@' + member.login].join(' · ');
                     const actions = item.querySelector('.member-actions');
 
                     if (isSelf || data.viewer.can_organise) {
