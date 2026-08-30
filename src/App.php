@@ -67,11 +67,14 @@ class App extends BaseApp {
         $this->app->route( 'member/{id}', 'index.php' );
         // A member's profile: birthday, allergies, sizes, notes.
         $this->app->route( 'profile/{id}', 'profile.php' );
+        // Household overview: members, roles, settings. Members are added here.
+        $this->app->route( 'household', 'household.php' );
     }
 
     protected function setup_menu(): void {
         $base = home_url( '/' . $this->get_url_path() . '/' );
         $this->app->add_menu_item( 'dashboard', __( 'Dashboard', 'family-manager' ), $base );
+        $this->app->add_menu_item( 'household', __( 'Household', 'family-manager' ), $base . 'household/' );
 
         $user_id = get_current_user_id();
         if ( ! $user_id ) {
@@ -199,6 +202,7 @@ class App extends BaseApp {
 
         $can_manage = Access::can_manage( $user_id, $household_id );
         $can_organise = Access::can_organise( $user_id, $household_id );
+        $rewards_enabled = $this->storage->rewards_enabled( $household_id );
         $post = static function( string $key, string $filter = 'text' ) {
             if ( ! isset( $_POST[ $key ] ) ) {
                 return 'int' === $filter ? 0 : '';
@@ -237,6 +241,14 @@ class App extends BaseApp {
         }
 
         switch ( $action ) {
+            case 'update_household':
+                $this->assert_allowed( $can_manage );
+                $this->storage->update_household( $household_id, [
+                    'name'            => $post( 'name' ),
+                    'rewards_enabled' => '1' === $post( 'rewards_enabled', 'key' ),
+                ] );
+                break;
+
             case 'add_member':
                 $this->assert_allowed( $can_manage );
                 $this->storage->add_member( $household_id, $post( 'name' ), $post( 'role', 'key' ) ?: Access::ROLE_CHILD, $post( 'email', 'email' ), $post( 'password', 'raw' ) );
@@ -261,7 +273,9 @@ class App extends BaseApp {
             case 'add_task':
                 $this->assert_allowed( $can_organise );
                 if ( '' !== $post( 'title' ) ) {
-                    $this->storage->add_task( $household_id, $post( 'title' ), $post( 'member_id', 'int' ), $post( 'task_type', 'key' ) ?: 'task', $post( 'points', 'int' ), $post( 'due_date' ) );
+                    // Points only mean something when the household uses rewards.
+                    $points = $rewards_enabled ? $post( 'points', 'int' ) : 0;
+                    $this->storage->add_task( $household_id, $post( 'title' ), $post( 'member_id', 'int' ), $post( 'task_type', 'key' ) ?: 'task', $points, $post( 'due_date' ) );
                 }
                 break;
 
@@ -275,7 +289,7 @@ class App extends BaseApp {
                 break;
 
             case 'add_reward':
-                $this->assert_allowed( $can_organise );
+                $this->assert_allowed( $can_organise && $rewards_enabled );
                 if ( '' !== $post( 'title' ) ) {
                     $this->storage->add_reward( $household_id, $post( 'title' ), $post( 'member_id', 'int' ), $post( 'points', 'int' ) );
                 }

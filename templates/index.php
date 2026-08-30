@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php wp_app_title(); ?></title>
+    <title><?php echo wp_app_title(); ?></title>
     <?php wp_app_head(); ?>
     <style>
         :root {
@@ -47,15 +47,23 @@
         .grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.9fr); gap: 16px; align-items: start; }
         .panel { background: var(--fm-surface); border: 1px solid var(--fm-line); border-radius: 8px; padding: 16px; }
         .panel h2 { margin: 0 0 12px; font-size: 1.05rem; }
-        .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; }
         .stat { border-left: 4px solid var(--fm-accent); background: var(--fm-surface); border-radius: 6px; padding: 12px; }
         .stat:nth-child(2) { border-color: var(--fm-blue); }
         .stat:nth-child(3) { border-color: var(--fm-warm); }
         .stat strong { display: block; font-size: 1.6rem; line-height: 1; }
         .stat span { color: var(--fm-muted); font-size: 0.85rem; }
-        .forms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .forms { margin-bottom: 16px; }
         form { display: grid; gap: 8px; }
-        .row { display: grid; grid-template-columns: 1fr 92px; gap: 8px; }
+        .add-task { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 90px auto; gap: 8px; align-items: start; }
+        .add-task button { padding: 0 20px; }
+        .add-task[data-no-points] .points { display: none; }
+        .add-task[data-no-points] { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; }
+        details.add-reward { margin-top: 12px; }
+        details.add-reward summary { cursor: pointer; color: var(--fm-accent-strong); font-weight: 700; }
+        details.add-reward form { margin-top: 10px; }
+        .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+        .panel-head a { color: var(--fm-accent-strong); font-weight: 700; font-size: 0.9rem; text-decoration: none; }
         .task-list, .member-list, .reward-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
         .item { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; border: 1px solid var(--fm-line); border-radius: 6px; padding: 10px; }
         .item.done { opacity: 0.62; }
@@ -70,14 +78,11 @@
         .member-link { color: inherit; text-decoration: none; }
         .member-link:hover .title { text-decoration: underline; }
         .member-actions { display: flex; gap: 6px; align-items: center; }
-        .member-actions select { min-height: 32px; width: auto; }
-        .member-actions button { min-height: 32px; padding: 0 8px; }
         .member-actions a { display: inline-flex; align-items: center; min-height: 32px; padding: 0 8px; border: 1px solid var(--fm-line); border-radius: 6px; color: var(--fm-accent-strong); font-size: 0.85rem; font-weight: 700; text-decoration: none; }
         .birthday-list { display: grid; gap: 8px; margin: 0 0 18px; padding: 0; list-style: none; }
         [hidden] { display: none !important; }
         @media (max-width: 860px) {
-            .topbar, .grid, .forms { grid-template-columns: 1fr; display: grid; }
-            .stats { grid-template-columns: 1fr; }
+            .topbar, .grid, .add-task { grid-template-columns: 1fr; display: grid; }
         }
     </style>
 </head>
@@ -88,7 +93,7 @@
         <div class="topbar">
             <div>
                 <h1><?php echo esc_html__( 'Family Manager', 'family-manager' ); ?></h1>
-                <p class="subtitle"><?php echo esc_html__( 'A household dashboard for tasks, appointments and rewards. Every member has their own login and their own view.', 'family-manager' ); ?></p>
+                <p class="subtitle"><?php echo esc_html__( 'A household dashboard for tasks and appointments. Every member has their own login and their own view.', 'family-manager' ); ?></p>
             </div>
             <div class="status" data-status><?php echo esc_html__( 'Loading household...', 'family-manager' ); ?></div>
         </div>
@@ -100,43 +105,22 @@
         <section class="stats" aria-label="<?php echo esc_attr__( 'Household summary', 'family-manager' ); ?>">
             <div class="stat"><strong data-stat="tasks">0</strong><span><?php echo esc_html__( 'Open tasks', 'family-manager' ); ?></span></div>
             <div class="stat"><strong data-stat="appointments">0</strong><span><?php echo esc_html__( 'Appointments', 'family-manager' ); ?></span></div>
-            <div class="stat"><strong data-stat="points">0</strong><span><?php echo esc_html__( 'Reward points', 'family-manager' ); ?></span></div>
+            <div class="stat" data-rewards-only hidden><strong data-stat="points">0</strong><span><?php echo esc_html__( 'Reward points', 'family-manager' ); ?></span></div>
         </section>
 
         <section class="forms" data-organiser>
             <div class="panel">
-                <h2><?php echo esc_html__( 'Add Member', 'family-manager' ); ?></h2>
-                <form data-action="add_member">
-                    <input name="name" required placeholder="<?php echo esc_attr__( 'Name', 'family-manager' ); ?>">
-                    <select name="role" data-roles></select>
-                    <input name="email" type="email" placeholder="<?php echo esc_attr__( 'Email (optional, links an existing account)', 'family-manager' ); ?>">
-                    <input name="password" type="text" autocomplete="off" placeholder="<?php echo esc_attr__( 'Password (optional)', 'family-manager' ); ?>">
-                    <button type="submit"><?php echo esc_html__( 'Create account', 'family-manager' ); ?></button>
-                </form>
-            </div>
-            <div class="panel">
-                <h2><?php echo esc_html__( 'Add Task', 'family-manager' ); ?></h2>
-                <form data-action="add_task">
-                    <input name="title" required placeholder="<?php echo esc_attr__( 'Task or appointment', 'family-manager' ); ?>">
+                <h2><?php echo esc_html__( 'Add a task or appointment', 'family-manager' ); ?></h2>
+                <form class="add-task" data-action="add_task">
+                    <input name="title" required placeholder="<?php echo esc_attr__( 'What needs doing?', 'family-manager' ); ?>">
                     <select name="member_id" data-members><option value="0"><?php echo esc_html__( 'Whole household', 'family-manager' ); ?></option></select>
-                    <div class="row">
-                        <select name="task_type">
-                            <option value="task"><?php echo esc_html__( 'Task', 'family-manager' ); ?></option>
-                            <option value="appointment"><?php echo esc_html__( 'Appointment', 'family-manager' ); ?></option>
-                        </select>
-                        <input name="points" type="number" min="0" step="1" value="5" aria-label="<?php echo esc_attr__( 'Points', 'family-manager' ); ?>">
-                    </div>
+                    <select name="task_type">
+                        <option value="task"><?php echo esc_html__( 'Task', 'family-manager' ); ?></option>
+                        <option value="appointment"><?php echo esc_html__( 'Appointment', 'family-manager' ); ?></option>
+                    </select>
                     <input name="due_date" type="date" aria-label="<?php echo esc_attr__( 'Due date', 'family-manager' ); ?>">
-                    <button type="submit"><?php echo esc_html__( 'Add task', 'family-manager' ); ?></button>
-                </form>
-            </div>
-            <div class="panel">
-                <h2><?php echo esc_html__( 'Add Reward', 'family-manager' ); ?></h2>
-                <form data-action="add_reward">
-                    <input name="title" required placeholder="<?php echo esc_attr__( 'Reward', 'family-manager' ); ?>">
-                    <select name="member_id" data-members><option value="0"><?php echo esc_html__( 'Any member', 'family-manager' ); ?></option></select>
-                    <input name="points" type="number" min="0" step="1" value="20" aria-label="<?php echo esc_attr__( 'Points', 'family-manager' ); ?>">
-                    <button type="submit"><?php echo esc_html__( 'Add reward', 'family-manager' ); ?></button>
+                    <input class="points" name="points" type="number" min="0" step="1" value="5" aria-label="<?php echo esc_attr__( 'Points', 'family-manager' ); ?>" placeholder="<?php echo esc_attr__( 'Points', 'family-manager' ); ?>">
+                    <button type="submit"><?php echo esc_html__( 'Add', 'family-manager' ); ?></button>
                 </form>
             </div>
         </section>
@@ -149,10 +133,24 @@
             <div class="panel">
                 <h2><?php echo esc_html__( 'Upcoming Birthdays', 'family-manager' ); ?></h2>
                 <ul class="birthday-list" data-birthdays></ul>
-                <h2><?php echo esc_html__( 'Members', 'family-manager' ); ?></h2>
+                <div class="panel-head">
+                    <h2><?php echo esc_html__( 'Members', 'family-manager' ); ?></h2>
+                    <a href="<?php echo esc_url( home_url( '/family-manager/household/' ) ); ?>" data-manage-link hidden><?php echo esc_html__( 'Manage household', 'family-manager' ); ?></a>
+                </div>
                 <ul class="member-list" data-members-list></ul>
-                <h2 style="margin-top:18px;"><?php echo esc_html__( 'Reward Ideas', 'family-manager' ); ?></h2>
-                <ul class="reward-list" data-rewards></ul>
+                <div data-rewards-only hidden>
+                    <h2 style="margin-top:18px;"><?php echo esc_html__( 'Reward Ideas', 'family-manager' ); ?></h2>
+                    <ul class="reward-list" data-rewards></ul>
+                    <details class="add-reward" data-organiser-only>
+                        <summary><?php echo esc_html__( 'Add a reward', 'family-manager' ); ?></summary>
+                        <form data-action="add_reward">
+                            <input name="title" required placeholder="<?php echo esc_attr__( 'Reward', 'family-manager' ); ?>">
+                            <select name="member_id" data-members><option value="0"><?php echo esc_html__( 'Any member', 'family-manager' ); ?></option></select>
+                            <input name="points" type="number" min="0" step="1" value="20" aria-label="<?php echo esc_attr__( 'Points', 'family-manager' ); ?>">
+                            <button type="submit"><?php echo esc_html__( 'Add reward', 'family-manager' ); ?></button>
+                        </form>
+                    </details>
+                </div>
             </div>
         </section>
     </main>
@@ -199,26 +197,17 @@
 
             const viewingAs = app.querySelector('[data-viewing-as]');
             const organiser = app.querySelector('[data-organiser]');
-            const roleSelects = app.querySelectorAll('[data-roles]');
-            const roleLabels = {};
+            const addTask = app.querySelector('form.add-task');
 
             function render(data) {
-                Object.assign(roleLabels, data.roles);
+                const rewards = !!data.household.rewards_enabled;
                 viewingAs.hidden = !data.permissions.viewing_as_other;
                 viewingAs.querySelector('[data-viewing-name]').textContent = data.subject.name || '';
                 organiser.hidden = !data.permissions.organise;
-                organiser.querySelector('form[data-action="add_member"]').closest('.panel').hidden = !data.permissions.manage;
-
-                roleSelects.forEach((select) => {
-                    if (select.options.length) return;
-                    Object.keys(data.roles).forEach((key) => {
-                        const option = document.createElement('option');
-                        option.value = key;
-                        option.textContent = data.roles[key];
-                        option.selected = key === 'child';
-                        select.appendChild(option);
-                    });
-                });
+                app.querySelectorAll('[data-organiser-only]').forEach((el) => el.hidden = !data.permissions.organise);
+                app.querySelectorAll('[data-rewards-only]').forEach((el) => el.hidden = !rewards);
+                app.querySelector('[data-manage-link]').hidden = !data.permissions.manage || data.permissions.viewing_as_other;
+                addTask.toggleAttribute('data-no-points', !rewards);
 
                 const openTasks = data.tasks.filter((task) => task.is_done === '0');
                 stats.tasks.textContent = openTasks.filter((task) => task.task_type !== 'appointment').length;
@@ -244,54 +233,32 @@
                     item.innerHTML = '<button class="secondary" type="button">' + (task.is_done === '1' ? '<?php echo esc_js( __( 'Undo', 'family-manager' ) ); ?>' : '<?php echo esc_js( __( 'Done', 'family-manager' ) ); ?>') + '</button><div><div class="title"></div><div class="meta"></div></div><span class="pill"></span>';
                     item.querySelector('.title').textContent = task.title;
                     item.querySelector('.meta').textContent = [task.member_name || '<?php echo esc_js( __( 'Household', 'family-manager' ) ); ?>', task.due_date || '<?php echo esc_js( __( 'No date', 'family-manager' ) ); ?>'].join(' · ');
-                    item.querySelector('.pill').textContent = task.task_type === 'appointment' ? '<?php echo esc_js( __( 'Appointment', 'family-manager' ) ); ?>' : '+' + task.points;
+                    item.querySelector('.pill').textContent = task.task_type === 'appointment' ? '<?php echo esc_js( __( 'Appointment', 'family-manager' ) ); ?>' : (rewards && parseInt(task.points, 10) > 0 ? '+' + task.points : '');
+                    item.querySelector('.pill').hidden = !item.querySelector('.pill').textContent;
                     item.querySelector('button').addEventListener('click', () => save({ family_action: 'toggle_task', task_id: task.id }));
                     taskList.appendChild(item);
                 });
 
-                memberList.innerHTML = data.members.length ? '' : '<li class="empty"><?php echo esc_js( __( 'Add members to assign tasks and rewards.', 'family-manager' ) ); ?></li>';
+                memberList.innerHTML = data.members.length ? '' : '<li class="empty"><?php echo esc_js( __( 'No members yet.', 'family-manager' ) ); ?></li>';
                 data.members.forEach((member) => {
                     const item = document.createElement('li');
                     const isSelf = member.id === data.viewer.id;
                     item.className = 'item';
                     item.innerHTML = '<div class="member-actions"></div><a class="member-link"><div class="title"></div><div class="meta"></div></a><span class="pill"></span>';
                     item.querySelector('.title').textContent = member.name;
-                    item.querySelector('.meta').textContent = member.role_label + ' · @' + member.login;
+                    item.querySelector('.meta').textContent = member.role_label;
                     item.querySelector('.pill').textContent = member.points + ' pts';
+                    item.querySelector('.pill').hidden = !rewards;
                     const link = item.querySelector('.member-link');
                     if (data.permissions.manage && !isSelf) {
                         link.href = window.familyManager.memberUrl + member.id + '/';
                         link.title = '<?php echo esc_js( __( 'View the app as this member', 'family-manager' ) ); ?>';
                     }
-                    const actions = item.querySelector('.member-actions');
                     if (!data.permissions.viewing_as_other && (isSelf || data.viewer.can_organise)) {
                         const profile = document.createElement('a');
                         profile.href = window.familyManager.profileUrl + member.id + '/';
                         profile.textContent = '<?php echo esc_js( __( 'Profile', 'family-manager' ) ); ?>';
-                        actions.appendChild(profile);
-                    }
-                    if (data.permissions.manage && !isSelf && !data.permissions.viewing_as_other) {
-                        const select = document.createElement('select');
-                        Object.keys(roleLabels).forEach((key) => {
-                            const option = document.createElement('option');
-                            option.value = key;
-                            option.textContent = roleLabels[key];
-                            option.selected = key === member.role;
-                            select.appendChild(option);
-                        });
-                        select.addEventListener('change', () => save({ family_action: 'set_member_role', member_id: member.id, role: select.value }));
-                        const remove = document.createElement('button');
-                        remove.type = 'button';
-                        remove.className = 'secondary';
-                        remove.textContent = '×';
-                        remove.title = '<?php echo esc_js( __( 'Remove from household', 'family-manager' ) ); ?>';
-                        remove.addEventListener('click', () => {
-                            if (confirm('<?php echo esc_js( __( 'Remove this member from the household? Their account is kept.', 'family-manager' ) ); ?>')) {
-                                save({ family_action: 'remove_member', member_id: member.id });
-                            }
-                        });
-                        actions.appendChild(select);
-                        actions.appendChild(remove);
+                        item.querySelector('.member-actions').appendChild(profile);
                     }
                     memberList.appendChild(item);
                 });
