@@ -17,6 +17,8 @@ class Storage {
     public const META_HOUSEHOLD_ID = '_family_manager_household_id';
     public const META_USER_ID      = '_family_manager_user_id';
     public const META_POINTS       = '_family_manager_points';
+    /** Household setting: whether tasks earn points and rewards are shown. Off by default. */
+    public const META_REWARDS      = '_family_manager_rewards_enabled';
 
     /* ---------------------------------------------------------------- Households */
 
@@ -77,6 +79,27 @@ class Storage {
         $this->get_or_create_member_term( $admin_user_id );
 
         return (int) $household_id;
+    }
+
+    /**
+     * Rename a household and switch its optional features on or off.
+     *
+     * @param array{name?:string,rewards_enabled?:bool} $settings
+     */
+    public function update_household( int $household_id, array $settings ): void {
+        if ( ! $this->format_household( $household_id ) ) {
+            return;
+        }
+        if ( isset( $settings['name'] ) && '' !== trim( $settings['name'] ) ) {
+            wp_update_post( [ 'ID' => $household_id, 'post_title' => trim( $settings['name'] ) ] );
+        }
+        if ( isset( $settings['rewards_enabled'] ) ) {
+            update_post_meta( $household_id, self::META_REWARDS, $settings['rewards_enabled'] ? '1' : '0' );
+        }
+    }
+
+    public function rewards_enabled( int $household_id ): bool {
+        return '1' === get_post_meta( $household_id, self::META_REWARDS, true );
     }
 
     /* ---------------------------------------------------------------- Dashboard */
@@ -453,9 +476,10 @@ class Storage {
             return [];
         }
         return [
-            'id'         => $household_id,
-            'name'       => $household->post_title,
-            'created_at' => $household->post_date,
+            'id'              => $household_id,
+            'name'            => $household->post_title,
+            'created_at'      => $household->post_date,
+            'rewards_enabled' => $this->rewards_enabled( $household_id ),
         ];
     }
 
