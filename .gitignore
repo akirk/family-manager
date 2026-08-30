@@ -1,1 +1,4 @@
 /vendor/
+
+# Worktrees Claude Code creates for isolated agent runs.
+/.claude/worktrees/

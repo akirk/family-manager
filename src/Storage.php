@@ -50,6 +50,48 @@ class Storage {
         return array_values( array_filter( array_map( [ $this, 'format_household' ], Access::household_ids_for_user( $user_id ) ) ) );
     }
 
+    /**
+     * The user's households with what an overview needs: their role there,
+     * who else is in it, how much is open, and whether it is the current one.
+     */
+    public function get_households_overview( int $user_id ): array {
+        $current = $this->current_household_id( $user_id );
+        $overview = [];
+        foreach ( $this->get_households_for_user( $user_id ) as $household ) {
+            $id = $household['id'];
+            $members = $this->get_members( $id );
+            $tasks = $this->get_tasks( $id );
+            if ( ! Access::can_organise( $user_id, $id ) ) {
+                $tasks = array_values( array_filter( $tasks, static function( array $task ) use ( $user_id ): bool {
+                    return 0 === $task['member_id'] || $task['member_id'] === $user_id;
+                } ) );
+            }
+            $open_tasks = 0;
+            $appointments = 0;
+            foreach ( $tasks as $task ) {
+                if ( '0' !== $task['is_done'] ) {
+                    continue;
+                }
+                if ( 'appointment' === $task['task_type'] ) {
+                    ++$appointments;
+                } else {
+                    ++$open_tasks;
+                }
+            }
+            $role = Access::role_in_household( $user_id, $id );
+            $overview[] = $household + [
+                'is_current'   => $id === $current,
+                'role'         => $role,
+                'role_label'   => Access::roles()[ $role ] ?? '',
+                'can_manage'   => Access::can_manage( $user_id, $id ),
+                'member_names' => array_column( $members, 'name' ),
+                'open_tasks'   => $open_tasks,
+                'appointments' => $appointments,
+            ];
+        }
+        return $overview;
+    }
+
     public function get_or_create_household_for_user( int $user_id ): array {
         $current = $this->current_household_id( $user_id );
         if ( $current ) {

@@ -44,6 +44,7 @@
         h1 { margin: 0; font-size: clamp(2rem, 5vw, 4rem); line-height: 1; letter-spacing: 0; }
         .subtitle { max-width: 720px; margin: 8px 0 0; color: var(--fm-muted); font-size: 1.05rem; }
         .status { color: var(--fm-muted); font-size: 0.92rem; min-height: 22px; }
+        .status a { color: var(--fm-accent-strong); font-weight: 700; }
         .grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.9fr); gap: 16px; align-items: start; }
         .panel { background: var(--fm-surface); border: 1px solid var(--fm-line); border-radius: 8px; padding: 16px; }
         .panel h2 { margin: 0 0 12px; font-size: 1.05rem; }
@@ -162,6 +163,7 @@
             'viewAs'  => (int) get_query_var( 'id' ),
             'memberUrl' => home_url( '/family-manager/member/' ),
             'profileUrl' => home_url( '/family-manager/profile/' ),
+            'householdsUrl' => home_url( '/family-manager/households/' ),
         ] ); ?>;
     </script>
     <script>
@@ -285,7 +287,14 @@
                     rewardList.appendChild(item);
                 });
 
-                status.textContent = data.household.name + (data.permissions.viewing_as_other ? '' : ' · ' + data.viewer.role_label) + (data.households.length > 1 ? ' · ' + data.households.length + ' <?php echo esc_js( __( 'households', 'family-manager' ) ); ?>' : '');
+                status.textContent = data.household.name + (data.permissions.viewing_as_other ? '' : ' · ' + data.viewer.role_label);
+                if (data.households.length > 1) {
+                    const link = document.createElement('a');
+                    link.href = window.familyManager.householdsUrl;
+                    link.textContent = data.households.length + ' <?php echo esc_js( __( 'households', 'family-manager' ) ); ?>';
+                    status.appendChild(document.createTextNode(' · '));
+                    status.appendChild(link);
+                }
             }
 
             function load() {
