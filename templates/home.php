@@ -71,6 +71,8 @@ require __DIR__ . '/_head.php';
                 noItems: '<?php echo esc_js( __( 'Nothing listed yet.', 'households' ) ); ?>',
                 everyone: '<?php echo esc_js( __( 'Everyone', 'households' ) ); ?>',
                 remove: '<?php echo esc_js( __( 'Remove', 'households' ) ); ?>',
+                moveTo: '<?php echo esc_js( __( 'Move to %s', 'households' ) ); ?>',
+                notTracked: '<?php echo esc_js( __( '%s could be anywhere today.', 'households' ) ); ?>',
                 appointment: '<?php echo esc_js( __( 'Appointment', 'households' ) ); ?>',
                 viewingAs: '<?php echo esc_js( __( 'You are looking at this home as %s sees it.', 'households' ) ); ?>',
                 turning: '<?php echo esc_js( __( '%1$s turns %2$d in %3$d days', 'households' ) ); ?>',
@@ -129,7 +131,8 @@ require __DIR__ . '/_head.php';
                 });
             }
 
-            function renderNotes(target, notes, kind, empty, canOrganise) {
+            function renderNotes(target, notes, kind, empty, data) {
+                const canOrganise = data.viewer.can_organise;
                 target.innerHTML = '';
                 if (!notes.length) {
                     target.appendChild(hh.el('li', { class: 'empty', text: empty }));
@@ -137,7 +140,16 @@ require __DIR__ . '/_head.php';
                 }
                 notes.forEach((note) => {
                     const right = [];
-                    if (canOrganise) {
+                    // A thing is somewhere rather than nowhere: it moves to
+                    // another home instead of being taken off the list.
+                    if (canOrganise && kind === 'item') {
+                        data.homes.filter((home) => home.id !== data.home.id).forEach((home) => {
+                            right.push(hh.el('button', {
+                                class: 'quiet', type: 'button', text: t.moveTo.replace('%s', home.name),
+                                onclick: () => send('move_note', { kind: kind, note_id: note.id, target_home_id: home.id }),
+                            }));
+                        });
+                    } else if (canOrganise) {
                         right.push(hh.el('button', {
                             class: 'quiet', type: 'button', text: t.remove,
                             onclick: () => send('remove_note', { kind: kind, note_id: note.id }),
@@ -148,7 +160,7 @@ require __DIR__ . '/_head.php';
                             hh.el('strong', { text: note.title }),
                             hh.el('div', { class: 'meta', text: note.detail }),
                         ]),
-                        hh.el('div', {}, right),
+                        hh.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, right),
                     ]));
                 });
             }
@@ -156,7 +168,11 @@ require __DIR__ . '/_head.php';
             function render(data) {
                 nodes.name.textContent = data.home.name;
                 const names = data.here.map((p) => p.name);
-                nodes.here.textContent = names.length ? t.here + ' ' + names.join(', ') : t.nobody;
+                const lines = [names.length ? t.here + ' ' + names.join(', ') : t.nobody];
+                if (data.unknown && data.unknown.length) {
+                    lines.push(t.notTracked.replace('%s', data.unknown.map((p) => p.name).join(', ')));
+                }
+                nodes.here.textContent = lines.join(' ');
 
                 nodes.viewingAs.hidden = !data.viewer.viewing_as;
                 if (data.viewer.viewing_as) {
@@ -164,8 +180,8 @@ require __DIR__ . '/_head.php';
                 }
 
                 renderTasks(data);
-                renderNotes(nodes.facts, data.facts, 'fact', t.noFacts, data.viewer.can_organise);
-                renderNotes(nodes.items, data.items, 'item', t.noItems, data.viewer.can_organise);
+                renderNotes(nodes.facts, data.facts, 'fact', t.noFacts, data);
+                renderNotes(nodes.items, data.items, 'item', t.noItems, data);
 
                 nodes.birthdaysSection.hidden = !data.birthdays.length;
                 nodes.birthdays.innerHTML = '';

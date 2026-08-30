@@ -1,17 +1,18 @@
 <?php require __DIR__ . '/_head.php'; ?>
         <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Your homes', 'households' ); ?></a>
         <h1><?php echo esc_html__( 'Who is where', 'households' ); ?></h1>
-        <p class="subtitle" data-reading-from></p>
+        <p class="subtitle"><?php echo esc_html__( 'Everyone across the homes you belong to, and where they are today.', 'households' ); ?></p>
         <div class="status" data-status><?php echo esc_html__( 'Loading…', 'households' ); ?></div>
 
         <section>
-            <h2><?php echo esc_html__( 'Right now', 'households' ); ?></h2>
-            <ul class="plain" data-now></ul>
-            <p class="meta" data-home-picker style="margin-top:10px"></p>
+            <h2><?php echo esc_html__( 'Everyone', 'households' ); ?></h2>
+            <ul class="plain" data-everyone></ul>
         </section>
 
         <section>
             <h2><?php echo esc_html__( 'The next fortnight', 'households' ); ?></h2>
+            <p class="meta" data-reading-from></p>
+            <p class="meta" data-home-picker></p>
             <p class="meta" data-board-hint hidden><?php echo esc_html__( 'Tap a day to move it. Moving one day leaves the pattern alone.', 'households' ); ?></p>
             <div style="overflow-x:auto">
                 <table data-board style="border-collapse:collapse;min-width:100%"></table>
@@ -36,6 +37,12 @@
                 away: '<?php echo esc_js( __( 'away', 'households' ) ); ?>',
                 noRotation: '<?php echo esc_js( __( 'does not rotate', 'households' ) ); ?>',
                 nobody: '<?php echo esc_js( __( 'Nobody is here today.', 'households' ) ); ?>',
+                notTracked: '<?php echo esc_js( __( 'not tracked', 'households' ) ); ?>',
+                atHome: '<?php echo esc_js( __( 'at %s', 'households' ) ); ?>',
+                child: '<?php echo esc_js( __( 'Child', 'households' ) ); ?>',
+                noAccount: '<?php echo esc_js( __( 'No account', 'households' ) ); ?>',
+                you: '<?php echo esc_js( __( 'You', 'households' ) ); ?>',
+                belongs: '<?php echo esc_js( __( '%d homes', 'households' ) ); ?>',
                 noHandovers: '<?php echo esc_js( __( 'No handovers in this window.', 'households' ) ); ?>',
                 out: '<?php echo esc_js( __( 'leaving', 'households' ) ); ?>',
                 in: '<?php echo esc_js( __( 'arriving', 'households' ) ); ?>',
@@ -51,7 +58,7 @@
             };
             const nodes = {
                 readingFrom: document.querySelector('[data-reading-from]'),
-                now: document.querySelector('[data-now]'),
+                everyone: document.querySelector('[data-everyone]'),
                 picker: document.querySelector('[data-home-picker]'),
                 board: document.querySelector('[data-board]'),
                 boardHint: document.querySelector('[data-board-hint]'),
@@ -75,20 +82,29 @@
                     .catch((error) => hh.say(error.message, true));
             }
 
-            function renderNow(board) {
-                nodes.now.innerHTML = '';
-                const today = board.dates.length ? board.dates[0].date : '';
-                const here = board.people.filter((person) => {
-                    const day = person.days.find((d) => d.date === today);
-                    return !day || day.is_here;
-                });
-                if (!here.length) {
-                    nodes.now.appendChild(hh.el('li', { class: 'empty', text: t.nobody }));
-                }
-                here.forEach((person) => {
-                    nodes.now.appendChild(hh.el('li', { class: 'row' }, [
-                        hh.el('a', { href: hh.personUrl(person.id), text: person.name }),
-                        hh.el('span', { class: 'pill', text: person.rotation && person.rotation.pattern ? t.here : t.noRotation }),
+            function renderEveryone(everyone) {
+                nodes.everyone.innerHTML = '';
+                everyone.forEach((person) => {
+                    const pills = [];
+                    if (person.is_you) { pills.push(hh.el('span', { class: 'pill', text: t.you })); }
+                    if (person.is_child) { pills.push(hh.el('span', { class: 'pill', text: t.child })); }
+                    if (person.label) { pills.push(hh.el('span', { class: 'pill', text: person.label })); }
+                    if (!person.user_id) { pills.push(hh.el('span', { class: 'pill warm', text: t.noAccount })); }
+
+                    // Somewhere known, or honestly nowhere: a person who belongs
+                    // to several homes and rotates between none could be at any
+                    // of them, and guessing would read as an answer.
+                    const where = person.location.known
+                        ? hh.el('span', { class: 'pill', text: t.atHome.replace('%s', person.location.name) })
+                        : hh.el('span', { class: 'pill warm', text: t.notTracked });
+
+                    nodes.everyone.appendChild(hh.el('li', { class: 'row' }, [
+                        hh.el('div', {}, [
+                            hh.el('a', { href: hh.personUrl(person.id), text: person.name, style: 'font-weight:700' }),
+                            hh.el('div', { class: 'meta', text: person.homes.map((home) => home.name).join(' · ') }),
+                            hh.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:4px' }, pills),
+                        ]),
+                        where,
                     ]));
                 });
             }
@@ -231,7 +247,7 @@
                 state.start = board.start;
                 state.canOrganise = !!(data.permissions && data.permissions.organise);
                 nodes.readingFrom.textContent = t.readingFrom.replace('%s', board.home.name);
-                renderNow(board);
+                renderEveryone(data.everyone || []);
                 renderBoard(board);
                 renderHandovers(board);
                 renderRotations(board);

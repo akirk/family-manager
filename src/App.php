@@ -74,6 +74,8 @@ class App extends BaseApp {
         $this->app->route( '' );
         // Who is at which home, day by day, across the homes you belong to.
         $this->app->route( 'where', 'where.php' );
+        // Everything kept across the homes you belong to, and where it is.
+        $this->app->route( 'things', 'things.php' );
         // A person, and what travels with them between homes.
         $this->app->route( 'person/{person_id}', 'person.php' );
         // One home: its people, tasks, facts and things.
@@ -102,6 +104,7 @@ class App extends BaseApp {
         }
 
         $this->app->add_menu_item( 'where', __( 'Who is where', 'households' ), $base . 'where/' );
+        $this->app->add_menu_item( 'things', __( 'Things', 'households' ), $base . 'things/' );
 
         $open = $this->home_in_view( $user_id );
         if ( $open && Access::can_manage( $user_id, $open ) ) {
@@ -302,6 +305,13 @@ class App extends BaseApp {
             wp_send_json_success( [ 'homes' => $this->storage->get_homes_overview( $user_id ) ] );
         }
 
+        if ( 'get_things' === $action ) {
+            wp_send_json_success( [
+                'things' => $this->storage->get_things_overview( $user_id ),
+                'homes'  => $this->storage->get_homes_for_person( $viewer_person ),
+            ] );
+        }
+
         // The person page addresses someone directly rather than through a home.
         if ( 'get_person' === $action || 'save_person' === $action ) {
             $person_id = $post( 'person_id', 'int' ) ?: $viewer_person;
@@ -365,6 +375,7 @@ class App extends BaseApp {
 
             wp_send_json_success( [
                 'board'       => $this->storage->get_whereabouts_board( $home_id, $post( 'start' ), $post( 'window', 'int' ) ?: 14 ),
+                'everyone'    => $this->storage->get_people_overview( $user_id ),
                 'homes'       => $this->storage->get_homes_for_person( $viewer_person ),
                 'permissions' => [ 'organise' => $can_organise, 'manage' => $can_manage ],
             ] );
@@ -446,6 +457,13 @@ class App extends BaseApp {
             case 'update_note':
                 $this->assert_allowed( $can_organise );
                 $this->storage->update_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'note_id', 'int' ), $post( 'title' ), $post( 'detail', 'raw' ) );
+                break;
+
+            case 'move_note':
+                $this->assert_allowed( $can_organise );
+                $target = $post( 'target_home_id', 'int' );
+                $this->assert_allowed( Access::is_member( $viewer_person, $target ) );
+                $this->storage->move_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'note_id', 'int' ), $target );
                 break;
 
             case 'remove_note':

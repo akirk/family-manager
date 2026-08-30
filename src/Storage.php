@@ -94,6 +94,7 @@ class Storage {
                 'id'         => $home['id'],
                 'name'       => $home['name'],
                 'here'       => $this->who_is_here( $home['id'] ),
+                'unknown'    => $this->whereabouts_unknown( $home['id'] ),
                 'open_tasks' => $open,
                 'can_manage' => Access::can_manage( $user_id, $home['id'] ),
             ];
@@ -281,6 +282,37 @@ class Storage {
         return $born ? (int) $born->diff( new \DateTimeImmutable( current_time( 'Y-m-d' ) ) )->y : null;
     }
 
+    /**
+     * Everyone across every home the viewer belongs to, each listed once.
+     *
+     * Someone in three of your homes is one person, not three entries — which
+     * is the whole reason a person is a record rather than a membership row.
+     */
+    public function get_people_overview( int $user_id ): array {
+        $viewer = Access::person_for_user( $user_id );
+        $people = [];
+        foreach ( Access::home_ids_for_person( $viewer ) as $home_id ) {
+            foreach ( Access::person_ids_in_home( $home_id ) as $person_id ) {
+                if ( isset( $people[ $person_id ] ) ) {
+                    continue;
+                }
+                $person = $this->get_person( $person_id );
+                if ( ! $person ) {
+                    continue;
+                }
+                $person['location'] = $this->location_today( $person_id );
+                $person['rotates'] = (bool) Whereabouts::get_rotation( $person_id );
+                $person['is_you'] = $person_id === $viewer;
+                $people[ $person_id ] = $person;
+            }
+        }
+        $people = array_values( $people );
+        usort( $people, static function( array $a, array $b ): int {
+            return strcasecmp( $a['name'], $b['name'] );
+        } );
+        return $people;
+    }
+
     /* ---------------------------------------------------------------- Facts and items */
 
     /**
@@ -319,6 +351,20 @@ class Storage {
         return true;
     }
 
+    /**
+     * Move a thing to another home.
+     *
+     * The term is replaced rather than added: a thing is in one place at a
+     * time, which is the whole point of writing down where it is.
+     */
+    public function move_note( int $home_id, string $post_type, int $post_id, int $target_home_id ): bool {
+        if ( ! $this->note_belongs_to( $post_id, $post_type, $home_id ) || ! $this->get_home( $target_home_id ) ) {
+            return false;
+        }
+        wp_set_object_terms( $post_id, [ $target_home_id ], Access::TAXONOMY );
+        return true;
+    }
+
     public function remove_note( int $home_id, string $post_type, int $post_id ): bool {
         if ( ! $this->note_belongs_to( $post_id, $post_type, $home_id ) ) {
             return false;
@@ -348,6 +394,27 @@ class Storage {
     private function note_belongs_to( int $post_id, string $post_type, int $home_id ): bool {
         $post = get_post( $post_id );
         return $post && $post_type === $post->post_type && in_array( $home_id, $this->home_ids_of_post( $post_id ), true );
+    }
+
+    /**
+     * Everything kept across the homes the viewer belongs to, and which home it
+     * is at. A thing is in one place at a time, so this is a list, not a join.
+     */
+    public function get_things_overview( int $user_id ): array {
+        $viewer = Access::person_for_user( $user_id );
+        $things = [];
+        foreach ( Access::home_ids_for_person( $viewer ) as $home_id ) {
+            $home = $this->get_home( $home_id );
+            foreach ( $this->get_notes( $home_id, self::ITEM ) as $thing ) {
+                $thing['home_id'] = $home_id;
+                $thing['home_name'] = $home['name'] ?? '';
+                $things[] = $thing;
+            }
+        }
+        usort( $things, static function( array $a, array $b ): int {
+            return strcasecmp( $a['title'], $b['title'] );
+        } );
+        return $things;
     }
 
     /* ---------------------------------------------------------------- Tasks */
@@ -476,6 +543,7 @@ class Storage {
             'facts'      => $this->get_notes( $home_id, self::FACT ),
             'items'      => $this->get_notes( $home_id, self::ITEM ),
             'here'       => $this->who_is_here( $home_id ),
+            'unknown'    => $this->whereabouts_unknown( $home_id ),
             'birthdays'  => $this->get_upcoming_birthdays( $home_id ),
             'viewer'     => [
                 'user_id'      => $user_id,
@@ -489,22 +557,68 @@ class Storage {
 
     /* ---------------------------------------------------------------- Whereabouts */
 
-    /** Who is under this roof today: everyone whose rotation says so, plus everyone who does not rotate. */
-    public function who_is_here( int $home_id ): array {
-        $today = current_time( 'Y-m-d' );
-        $here = [];
-        foreach ( $this->get_people( $home_id ) as $person ) {
-            $where = Whereabouts::home_on( $person['id'], $today );
-            if ( ! $where['home_id'] || $where['home_id'] === $home_id ) {
-                $here[] = [
-                    'id'       => $person['id'],
-                    'name'     => $person['name'],
-                    'rotates'  => (bool) $where['home_id'],
-                    'is_child' => $person['is_child'],
-                ];
-            }
+    /**
+     * Where a person is today, as far as this app can honestly say.
+     *
+     * A rotation answers it outright. Without one, someone who belongs to a
+     * single home is at it — there is nowhere else they could be. Someone who
+     * belongs to several and rotates between none of them is simply not
+     * tracked, and saying where they are would be a guess dressed up as an
+     * answer.
+     *
+     * @return array{home_id:int,name:string,known:bool}
+     */
+    public function location_today( int $person_id ): array {
+        $where = Whereabouts::home_on( $person_id, current_time( 'Y-m-d' ) );
+        $home_id = $where['home_id'];
+        if ( ! $home_id ) {
+            $homes = Access::home_ids_for_person( $person_id );
+            $home_id = 1 === count( $homes ) ? $homes[0] : 0;
         }
-        return $here;
+        $home = $home_id ? $this->get_home( $home_id ) : [];
+        return [
+            'home_id' => $home_id,
+            'name'    => $home['name'] ?? '',
+            'known'   => (bool) $home_id,
+        ];
+    }
+
+    /** @return string 'here', 'away' or 'unknown'. */
+    private function presence( int $person_id, int $home_id ): string {
+        $location = $this->location_today( $person_id );
+        if ( ! $location['known'] ) {
+            return 'unknown';
+        }
+        return $location['home_id'] === $home_id ? 'here' : 'away';
+    }
+
+    /** Who is under this roof today. */
+    public function who_is_here( int $home_id ): array {
+        return $this->people_by_presence( $home_id, 'here' );
+    }
+
+    /**
+     * Who belongs here but could be anywhere: no rotation, and more than one
+     * home to be at. Reported rather than hidden, so an empty roof is
+     * distinguishable from one the app cannot account for.
+     */
+    public function whereabouts_unknown( int $home_id ): array {
+        return $this->people_by_presence( $home_id, 'unknown' );
+    }
+
+    private function people_by_presence( int $home_id, string $presence ): array {
+        $people = [];
+        foreach ( $this->get_people( $home_id ) as $person ) {
+            if ( $this->presence( $person['id'], $home_id ) !== $presence ) {
+                continue;
+            }
+            $people[] = [
+                'id'       => $person['id'],
+                'name'     => $person['name'],
+                'is_child' => $person['is_child'],
+            ];
+        }
+        return $people;
     }
 
     /**
@@ -560,6 +674,8 @@ class Storage {
 
         return [
             'home'      => $this->get_home( $home_id ),
+            'here'      => $this->who_is_here( $home_id ),
+            'unknown'   => $this->whereabouts_unknown( $home_id ),
             'dates'     => $dates,
             'people'    => $people,
             'handovers' => $this->collect_handovers( $people, $home_id ),
