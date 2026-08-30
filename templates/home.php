@@ -51,21 +51,15 @@
         .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; }
         .stat { border-left: 4px solid var(--fm-accent); background: var(--fm-surface); border-radius: 6px; padding: 12px; }
         .stat:nth-child(2) { border-color: var(--fm-blue); }
-        .stat:nth-child(3) { border-color: var(--fm-warm); }
         .stat strong { display: block; font-size: 1.6rem; line-height: 1; }
         .stat span { color: var(--fm-muted); font-size: 0.85rem; }
         .forms { margin-bottom: 16px; }
         form { display: grid; gap: 8px; }
-        .add-task { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 90px auto; gap: 8px; align-items: start; }
+        .add-task { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: start; }
         .add-task button { padding: 0 20px; }
-        .add-task[data-no-points] .points { display: none; }
-        .add-task[data-no-points] { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; }
-        details.add-reward { margin-top: 12px; }
-        details.add-reward summary { cursor: pointer; color: var(--fm-accent-strong); font-weight: 700; }
-        details.add-reward form { margin-top: 10px; }
         .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
         .panel-head a { color: var(--fm-accent-strong); font-weight: 700; font-size: 0.9rem; text-decoration: none; }
-        .task-list, .member-list, .reward-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+        .task-list, .member-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
         .item { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; border: 1px solid var(--fm-line); border-radius: 6px; padding: 10px; }
         .item.done { opacity: 0.62; }
         .item.done .title { text-decoration: line-through; }
@@ -111,7 +105,6 @@
         <section class="stats" aria-label="<?php echo esc_attr__( 'Household summary', 'households' ); ?>">
             <div class="stat"><strong data-stat="tasks">0</strong><span><?php echo esc_html__( 'Open tasks', 'households' ); ?></span></div>
             <div class="stat"><strong data-stat="appointments">0</strong><span><?php echo esc_html__( 'Appointments', 'households' ); ?></span></div>
-            <div class="stat" data-rewards-only hidden><strong data-stat="points">0</strong><span><?php echo esc_html__( 'Reward points', 'households' ); ?></span></div>
         </section>
 
         <section class="forms" data-organiser>
@@ -125,7 +118,6 @@
                         <option value="appointment"><?php echo esc_html__( 'Appointment', 'households' ); ?></option>
                     </select>
                     <input name="due_date" type="date" aria-label="<?php echo esc_attr__( 'Due date', 'households' ); ?>">
-                    <input class="points" name="points" type="number" min="0" step="1" value="5" aria-label="<?php echo esc_attr__( 'Points', 'households' ); ?>" placeholder="<?php echo esc_attr__( 'Points', 'households' ); ?>">
                     <button type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
                 </form>
             </div>
@@ -149,19 +141,6 @@
                     <a href="<?php echo esc_url( home_url( '/households/' . (int) get_query_var( 'id' ) . '/manage/' ) ); ?>" data-manage-link hidden><?php echo esc_html__( 'Manage this home', 'households' ); ?></a>
                 </div>
                 <ul class="member-list" data-members-list></ul>
-                <div data-rewards-only hidden>
-                    <h2 style="margin-top:18px;"><?php echo esc_html__( 'Reward Ideas', 'households' ); ?></h2>
-                    <ul class="reward-list" data-rewards></ul>
-                    <details class="add-reward" data-organiser-only>
-                        <summary><?php echo esc_html__( 'Add a reward', 'households' ); ?></summary>
-                        <form data-action="add_reward">
-                            <input name="title" required placeholder="<?php echo esc_attr__( 'Reward', 'households' ); ?>">
-                            <select name="member_id" data-members><option value="0"><?php echo esc_html__( 'Any member', 'households' ); ?></option></select>
-                            <input name="points" type="number" min="0" step="1" value="20" aria-label="<?php echo esc_attr__( 'Points', 'households' ); ?>">
-                            <button type="submit"><?php echo esc_html__( 'Add reward', 'households' ); ?></button>
-                        </form>
-                    </details>
-                </div>
             </div>
         </section>
     </main>
@@ -188,15 +167,13 @@
             const status = app.querySelector('[data-status]');
             const taskList = app.querySelector('[data-tasks]');
             const memberList = app.querySelector('[data-members-list]');
-            const rewardList = app.querySelector('[data-rewards]');
             const birthdayList = app.querySelector('[data-birthdays]');
             const whereaboutsList = app.querySelector('[data-whereabouts]');
             const whereaboutsPanel = app.querySelector('[data-whereabouts-panel]');
             const memberSelects = app.querySelectorAll('[data-members]');
             const stats = {
                 tasks: app.querySelector('[data-stat="tasks"]'),
-                appointments: app.querySelector('[data-stat="appointments"]'),
-                points: app.querySelector('[data-stat="points"]')
+                appointments: app.querySelector('[data-stat="appointments"]')
             };
 
             function request(payload) {
@@ -221,19 +198,15 @@
             const addTask = app.querySelector('form.add-task');
 
             function render(data) {
-                const rewards = !!data.household.rewards_enabled;
                 viewingAs.hidden = !data.permissions.viewing_as_other;
                 viewingAs.querySelector('[data-viewing-name]').textContent = data.subject.name || '';
                 organiser.hidden = !data.permissions.organise;
                 app.querySelectorAll('[data-organiser-only]').forEach((el) => el.hidden = !data.permissions.organise);
-                app.querySelectorAll('[data-rewards-only]').forEach((el) => el.hidden = !rewards);
                 app.querySelector('[data-manage-link]').hidden = !data.permissions.manage || data.permissions.viewing_as_other;
-                addTask.toggleAttribute('data-no-points', !rewards);
 
                 const openTasks = data.tasks.filter((task) => task.is_done === '0');
                 stats.tasks.textContent = openTasks.filter((task) => task.task_type !== 'appointment').length;
                 stats.appointments.textContent = openTasks.filter((task) => task.task_type === 'appointment').length;
-                stats.points.textContent = data.subject.can_organise ? data.members.reduce((sum, member) => sum + parseInt(member.points, 10), 0) : parseInt(data.subject.points, 10);
 
                 memberSelects.forEach((select) => {
                     const first = select.querySelector('option');
@@ -254,7 +227,7 @@
                     item.innerHTML = '<button class="secondary" type="button">' + (task.is_done === '1' ? '<?php echo esc_js( __( 'Undo', 'households' ) ); ?>' : '<?php echo esc_js( __( 'Done', 'households' ) ); ?>') + '</button><div><div class="title"></div><div class="meta"></div></div><span class="pill"></span>';
                     item.querySelector('.title').textContent = task.title;
                     item.querySelector('.meta').textContent = [task.member_name || '<?php echo esc_js( __( 'Household', 'households' ) ); ?>', task.due_date || '<?php echo esc_js( __( 'No date', 'households' ) ); ?>'].join(' · ');
-                    item.querySelector('.pill').textContent = task.task_type === 'appointment' ? '<?php echo esc_js( __( 'Appointment', 'households' ) ); ?>' : (rewards && parseInt(task.points, 10) > 0 ? '+' + task.points : '');
+                    item.querySelector('.pill').textContent = task.task_type === 'appointment' ? '<?php echo esc_js( __( 'Appointment', 'households' ) ); ?>' : '';
                     item.querySelector('.pill').hidden = !item.querySelector('.pill').textContent;
                     item.querySelector('button').addEventListener('click', () => save({ household_action: 'toggle_task', task_id: task.id }));
                     taskList.appendChild(item);
@@ -265,11 +238,9 @@
                     const item = document.createElement('li');
                     const isSelf = member.id === data.viewer.id;
                     item.className = 'item';
-                    item.innerHTML = '<div class="member-actions"></div><a class="member-link"><div class="title"></div><div class="meta"></div></a><span class="pill"></span>';
+                    item.innerHTML = '<div class="member-actions"></div><a class="member-link"><div class="title"></div><div class="meta"></div></a>';
                     item.querySelector('.title').textContent = member.name;
                     item.querySelector('.meta').textContent = member.role_label;
-                    item.querySelector('.pill').textContent = member.points + ' pts';
-                    item.querySelector('.pill').hidden = !rewards;
                     const link = item.querySelector('.member-link');
                     if (data.permissions.manage && !isSelf) {
                         link.href = window.households.homeUrl + 'as/' + member.id + '/';
@@ -319,17 +290,6 @@
                         + ' · ' + whereabouts.next_handoff.from_name + ' → ' + whereabouts.next_handoff.to_name;
                     whereaboutsList.appendChild(next);
                 }
-
-                rewardList.innerHTML = data.rewards.length ? '' : '<li class="empty"><?php echo esc_js( __( 'No rewards yet.', 'households' ) ); ?></li>';
-                data.rewards.forEach((reward) => {
-                    const item = document.createElement('li');
-                    item.className = 'item';
-                    item.innerHTML = '<div></div><div><div class="title"></div><div class="meta"></div></div><span class="pill"></span>';
-                    item.querySelector('.title').textContent = reward.title;
-                    item.querySelector('.meta').textContent = reward.member_name || '<?php echo esc_js( __( 'Any member', 'households' ) ); ?>';
-                    item.querySelector('.pill').textContent = reward.points + ' pts';
-                    rewardList.appendChild(item);
-                });
 
                 app.querySelector('[data-name]').textContent = data.household.name;
                 document.title = data.household.name + ' · ' + document.title.replace(/^.*· /, '');

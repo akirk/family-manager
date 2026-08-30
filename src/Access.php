@@ -33,7 +33,7 @@ class Access {
         return [ self::ROLE_ADMIN ];
     }
 
-    /** Roles that may add tasks/rewards and assign them to others. */
+    /** Roles that may add tasks and assign them to others. */
     public static function organising_roles(): array {
         return [ self::ROLE_ADMIN, self::ROLE_PARENT, self::ROLE_GRANDPARENT, self::ROLE_CAREGIVER ];
     }
