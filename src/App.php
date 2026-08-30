@@ -69,6 +69,8 @@ class App extends BaseApp {
         $this->app->route( 'profile/{id}', 'profile.php' );
         // Household overview: members, roles, settings. Members are added here.
         $this->app->route( 'household', 'household.php' );
+        // All households the user belongs to, for switching between them.
+        $this->app->route( 'households', 'households.php' );
     }
 
     protected function setup_menu(): void {
@@ -84,6 +86,7 @@ class App extends BaseApp {
         $current = $this->storage->current_household_id( $user_id );
         $households = $this->storage->get_households_for_user( $user_id );
         if ( count( $households ) > 1 ) {
+            $this->app->add_menu_item( 'households', __( 'All households', 'family-manager' ), $base . 'households/' );
             foreach ( $households as $household ) {
                 $is_current = $household['id'] === $current;
                 $this->app->add_menu_item(
@@ -192,6 +195,10 @@ class App extends BaseApp {
 
         if ( ! Access::can_view_user( $user_id, $subject_id ) ) {
             wp_send_json_error( [ 'message' => __( 'You do not have access to this member.', 'family-manager' ) ], 403 );
+        }
+
+        if ( 'get_households' === $action ) {
+            wp_send_json_success( [ 'households' => $this->storage->get_households_overview( $user_id ) ] );
         }
 
         $dashboard = $this->storage->get_dashboard( $user_id, $subject_id );
