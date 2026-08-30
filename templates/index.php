@@ -16,9 +16,7 @@
             --fm-accent: #176b5b;
             --fm-accent-strong: #0f4f43;
             --fm-warm: #9b5d2f;
-            --fm-blue: #315f8f;
         }
-
         @media (prefers-color-scheme: dark) {
             :root {
                 --fm-bg: #111614;
@@ -29,309 +27,118 @@
                 --fm-accent: #55b7a2;
                 --fm-accent-strong: #87d4c2;
                 --fm-warm: #d29561;
-                --fm-blue: #86add8;
             }
         }
-
         * { box-sizing: border-box; }
         body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; background: var(--fm-bg); color: var(--fm-text); line-height: 1.5; }
-        button, input, select { font: inherit; }
-        button { min-height: 40px; border: 1px solid var(--fm-accent-strong); border-radius: 6px; background: var(--fm-accent); color: #fff; font-weight: 700; cursor: pointer; }
-        button.secondary { background: transparent; color: var(--fm-accent-strong); }
-        input, select { width: 100%; min-height: 40px; padding: 0 10px; border: 1px solid var(--fm-line); border-radius: 6px; background: var(--fm-surface); color: var(--fm-text); }
-        main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 40px; }
-        .topbar { display: flex; justify-content: space-between; gap: 16px; align-items: end; margin-bottom: 22px; }
-        h1 { margin: 0; font-size: clamp(2rem, 5vw, 4rem); line-height: 1; letter-spacing: 0; }
-        .subtitle { max-width: 720px; margin: 8px 0 0; color: var(--fm-muted); font-size: 1.05rem; }
+        main { width: min(860px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 40px; }
+        .back { display: inline-block; margin-bottom: 12px; color: var(--fm-accent-strong); font-weight: 700; text-decoration: none; }
+        h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 3rem); line-height: 1.1; }
+        .subtitle { margin: 6px 0 20px; color: var(--fm-muted); }
         .status { color: var(--fm-muted); font-size: 0.92rem; min-height: 22px; }
-        .status a { color: var(--fm-accent-strong); font-weight: 700; }
-        .grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.9fr); gap: 16px; align-items: start; }
-        .panel { background: var(--fm-surface); border: 1px solid var(--fm-line); border-radius: 8px; padding: 16px; }
-        .panel h2 { margin: 0 0 12px; font-size: 1.05rem; }
-        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; }
-        .stat { border-left: 4px solid var(--fm-accent); background: var(--fm-surface); border-radius: 6px; padding: 12px; }
-        .stat:nth-child(2) { border-color: var(--fm-blue); }
-        .stat:nth-child(3) { border-color: var(--fm-warm); }
-        .stat strong { display: block; font-size: 1.6rem; line-height: 1; }
-        .stat span { color: var(--fm-muted); font-size: 0.85rem; }
-        .forms { margin-bottom: 16px; }
-        form { display: grid; gap: 8px; }
-        .add-task { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 90px auto; gap: 8px; align-items: start; }
-        .add-task button { padding: 0 20px; }
-        .add-task[data-no-points] .points { display: none; }
-        .add-task[data-no-points] { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; }
-        details.add-reward { margin-top: 12px; }
-        details.add-reward summary { cursor: pointer; color: var(--fm-accent-strong); font-weight: 700; }
-        details.add-reward form { margin-top: 10px; }
-        .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-        .panel-head a { color: var(--fm-accent-strong); font-weight: 700; font-size: 0.9rem; text-decoration: none; }
-        .task-list, .member-list, .reward-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-        .item { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; border: 1px solid var(--fm-line); border-radius: 6px; padding: 10px; }
-        .item.done { opacity: 0.62; }
-        .item.done .title { text-decoration: line-through; }
-        .title { font-weight: 750; }
-        .meta { color: var(--fm-muted); font-size: 0.86rem; }
-        .pill { display: inline-flex; align-items: center; min-height: 26px; padding: 0 8px; border-radius: 999px; background: color-mix(in srgb, var(--fm-accent) 12%, transparent); color: var(--fm-accent-strong); font-size: 0.82rem; font-weight: 700; white-space: nowrap; }
+        .household-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+        .household { background: var(--fm-surface); border: 1px solid var(--fm-line); border-radius: 8px; padding: 16px; display: grid; grid-template-columns: 1fr auto; gap: 12px; }
+        .household.current { border-color: var(--fm-accent); box-shadow: inset 4px 0 0 var(--fm-accent); }
+        .household h2 { margin: 0 0 2px; font-size: 1.15rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .meta { color: var(--fm-muted); font-size: 0.9rem; }
+        .here { color: var(--fm-text); font-weight: 700; }
+        .members { margin-top: 8px; }
+        h2 .name { color: inherit; text-decoration: none; }
+        h2 .name:hover { text-decoration: underline; }
+        .subtitle a { color: var(--fm-accent-strong); font-weight: 700; }
+        .pill { display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px; border-radius: 999px; background: color-mix(in srgb, var(--fm-accent) 12%, transparent); color: var(--fm-accent-strong); font-size: 0.78rem; font-weight: 700; white-space: nowrap; }
+        .actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+        .actions a { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 12px; border: 1px solid var(--fm-accent-strong); border-radius: 6px; color: var(--fm-accent-strong); font-size: 0.9rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
+        .actions a.primary { background: var(--fm-accent); color: #fff; }
         .empty { color: var(--fm-muted); border: 1px dashed var(--fm-line); border-radius: 6px; padding: 18px; text-align: center; }
-
-        .viewing-as { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 16px; padding: 10px 14px; border-radius: 6px; background: color-mix(in srgb, var(--fm-warm) 14%, transparent); border: 1px solid var(--fm-warm); }
-        .viewing-as a { color: var(--fm-warm); font-weight: 700; }
-        .member-link { color: inherit; text-decoration: none; }
-        .member-link:hover .title { text-decoration: underline; }
-        .member-actions { display: flex; gap: 6px; align-items: center; }
-        .member-actions a { display: inline-flex; align-items: center; min-height: 32px; padding: 0 8px; border: 1px solid var(--fm-line); border-radius: 6px; color: var(--fm-accent-strong); font-size: 0.85rem; font-weight: 700; text-decoration: none; }
-        .birthday-list { display: grid; gap: 8px; margin: 0 0 18px; padding: 0; list-style: none; }
         [hidden] { display: none !important; }
-        @media (max-width: 860px) {
-            .topbar, .grid, .add-task { grid-template-columns: 1fr; display: grid; }
+        @media (max-width: 600px) {
+            .household { grid-template-columns: 1fr; }
+            .actions { flex-direction: row; flex-wrap: wrap; }
         }
     </style>
 </head>
 <body>
     <?php wp_app_body_open(); ?>
 
-    <main id="family-manager-app">
-        <div class="topbar">
-            <div>
-                <h1><?php echo esc_html__( 'Family Manager', 'family-manager' ); ?></h1>
-                <p class="subtitle"><?php echo esc_html__( 'A household dashboard for tasks and appointments. Every member has their own login and their own view.', 'family-manager' ); ?></p>
-            </div>
-            <div class="status" data-status><?php echo esc_html__( 'Loading household...', 'family-manager' ); ?></div>
-        </div>
-
-        <div class="viewing-as" data-viewing-as hidden>
-            <span><?php echo esc_html__( 'Viewing as', 'family-manager' ); ?> <strong data-viewing-name></strong></span>
-            <a href="<?php echo esc_url( home_url( '/family-manager/' ) ); ?>"><?php echo esc_html__( 'Back to my view', 'family-manager' ); ?></a>
-        </div>
-        <section class="stats" aria-label="<?php echo esc_attr__( 'Household summary', 'family-manager' ); ?>">
-            <div class="stat"><strong data-stat="tasks">0</strong><span><?php echo esc_html__( 'Open tasks', 'family-manager' ); ?></span></div>
-            <div class="stat"><strong data-stat="appointments">0</strong><span><?php echo esc_html__( 'Appointments', 'family-manager' ); ?></span></div>
-            <div class="stat" data-rewards-only hidden><strong data-stat="points">0</strong><span><?php echo esc_html__( 'Reward points', 'family-manager' ); ?></span></div>
-        </section>
-
-        <section class="forms" data-organiser>
-            <div class="panel">
-                <h2><?php echo esc_html__( 'Add a task or appointment', 'family-manager' ); ?></h2>
-                <form class="add-task" data-action="add_task">
-                    <input name="title" required placeholder="<?php echo esc_attr__( 'What needs doing?', 'family-manager' ); ?>">
-                    <select name="member_id" data-members><option value="0"><?php echo esc_html__( 'Whole household', 'family-manager' ); ?></option></select>
-                    <select name="task_type">
-                        <option value="task"><?php echo esc_html__( 'Task', 'family-manager' ); ?></option>
-                        <option value="appointment"><?php echo esc_html__( 'Appointment', 'family-manager' ); ?></option>
-                    </select>
-                    <input name="due_date" type="date" aria-label="<?php echo esc_attr__( 'Due date', 'family-manager' ); ?>">
-                    <input class="points" name="points" type="number" min="0" step="1" value="5" aria-label="<?php echo esc_attr__( 'Points', 'family-manager' ); ?>" placeholder="<?php echo esc_attr__( 'Points', 'family-manager' ); ?>">
-                    <button type="submit"><?php echo esc_html__( 'Add', 'family-manager' ); ?></button>
-                </form>
-            </div>
-        </section>
-
-        <section class="grid">
-            <div class="panel">
-                <h2><?php echo esc_html__( 'Today and Next Up', 'family-manager' ); ?></h2>
-                <ul class="task-list" data-tasks></ul>
-            </div>
-            <div class="panel">
-                <h2><?php echo esc_html__( 'Upcoming Birthdays', 'family-manager' ); ?></h2>
-                <ul class="birthday-list" data-birthdays></ul>
-                <div class="panel-head">
-                    <h2><?php echo esc_html__( 'Members', 'family-manager' ); ?></h2>
-                    <a href="<?php echo esc_url( home_url( '/family-manager/household/' ) ); ?>" data-manage-link hidden><?php echo esc_html__( 'Manage household', 'family-manager' ); ?></a>
-                </div>
-                <ul class="member-list" data-members-list></ul>
-                <div data-rewards-only hidden>
-                    <h2 style="margin-top:18px;"><?php echo esc_html__( 'Reward Ideas', 'family-manager' ); ?></h2>
-                    <ul class="reward-list" data-rewards></ul>
-                    <details class="add-reward" data-organiser-only>
-                        <summary><?php echo esc_html__( 'Add a reward', 'family-manager' ); ?></summary>
-                        <form data-action="add_reward">
-                            <input name="title" required placeholder="<?php echo esc_attr__( 'Reward', 'family-manager' ); ?>">
-                            <select name="member_id" data-members><option value="0"><?php echo esc_html__( 'Any member', 'family-manager' ); ?></option></select>
-                            <input name="points" type="number" min="0" step="1" value="20" aria-label="<?php echo esc_attr__( 'Points', 'family-manager' ); ?>">
-                            <button type="submit"><?php echo esc_html__( 'Add reward', 'family-manager' ); ?></button>
-                        </form>
-                    </details>
-                </div>
-            </div>
-        </section>
+    <main id="households-index">
+        <h1><?php echo esc_html__( 'Your homes', 'households' ); ?></h1>
+        <p class="subtitle"><?php echo esc_html__( 'Every home you belong to, and who is under each roof today.', 'households' ); ?></p>
+        <div class="status" data-status><?php echo esc_html__( 'Loading...', 'households' ); ?></div>
+        <ul class="household-list" data-households></ul>
+        <p class="subtitle"><a href="<?php echo esc_url( home_url( '/households/where/' ) ); ?>"><?php echo esc_html__( 'Who is where, day by day', 'households' ); ?></a></p>
     </main>
 
     <script>
-        window.familyManager = <?php echo wp_json_encode( [
+        window.households = <?php echo wp_json_encode( [
             'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-            'nonce'   => wp_create_nonce( 'family_manager_app' ),
-            'viewAs'  => (int) get_query_var( 'id' ),
-            'memberUrl' => home_url( '/family-manager/member/' ),
-            'profileUrl' => home_url( '/family-manager/profile/' ),
-            'householdsUrl' => home_url( '/family-manager/households/' ),
+            'nonce'   => wp_create_nonce( 'households_app' ),
+            'baseUrl' => home_url( '/households/' ),
         ] ); ?>;
     </script>
     <script>
         (function() {
-            const app = document.getElementById('family-manager-app');
-            const status = app.querySelector('[data-status]');
-            const taskList = app.querySelector('[data-tasks]');
-            const memberList = app.querySelector('[data-members-list]');
-            const rewardList = app.querySelector('[data-rewards]');
-            const birthdayList = app.querySelector('[data-birthdays]');
-            const memberSelects = app.querySelectorAll('[data-members]');
-            const stats = {
-                tasks: app.querySelector('[data-stat="tasks"]'),
-                appointments: app.querySelector('[data-stat="appointments"]'),
-                points: app.querySelector('[data-stat="points"]')
-            };
+            const root = document.getElementById('households-index');
+            const status = root.querySelector('[data-status]');
+            const list = root.querySelector('[data-households]');
+            const fm = window.households;
 
-            function request(payload) {
-                const body = new FormData();
-                body.append('action', 'family_manager_dashboard');
-                body.append('nonce', window.familyManager.nonce);
-                if (window.familyManager.viewAs) {
-                    body.append('view_as', window.familyManager.viewAs);
-                }
-                Object.keys(payload || {}).forEach((key) => body.append(key, payload[key]));
-
-                return fetch(window.familyManager.ajaxUrl, {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    body
-                }).then((response) => response.json());
+            function homeUrl(id, suffix) {
+                return fm.baseUrl + id + '/' + (suffix || '');
             }
-
-            const viewingAs = app.querySelector('[data-viewing-as]');
-            const organiser = app.querySelector('[data-organiser]');
-            const addTask = app.querySelector('form.add-task');
 
             function render(data) {
-                const rewards = !!data.household.rewards_enabled;
-                viewingAs.hidden = !data.permissions.viewing_as_other;
-                viewingAs.querySelector('[data-viewing-name]').textContent = data.subject.name || '';
-                organiser.hidden = !data.permissions.organise;
-                app.querySelectorAll('[data-organiser-only]').forEach((el) => el.hidden = !data.permissions.organise);
-                app.querySelectorAll('[data-rewards-only]').forEach((el) => el.hidden = !rewards);
-                app.querySelector('[data-manage-link]').hidden = !data.permissions.manage || data.permissions.viewing_as_other;
-                addTask.toggleAttribute('data-no-points', !rewards);
-
-                const openTasks = data.tasks.filter((task) => task.is_done === '0');
-                stats.tasks.textContent = openTasks.filter((task) => task.task_type !== 'appointment').length;
-                stats.appointments.textContent = openTasks.filter((task) => task.task_type === 'appointment').length;
-                stats.points.textContent = data.subject.can_organise ? data.members.reduce((sum, member) => sum + parseInt(member.points, 10), 0) : parseInt(data.subject.points, 10);
-
-                memberSelects.forEach((select) => {
-                    const first = select.querySelector('option');
-                    select.innerHTML = '';
-                    select.appendChild(first);
-                    data.members.forEach((member) => {
-                        const option = document.createElement('option');
-                        option.value = member.id;
-                        option.textContent = member.name;
-                        select.appendChild(option);
-                    });
-                });
-
-                taskList.innerHTML = data.tasks.length ? '' : '<li class="empty"><?php echo esc_js( __( 'No tasks yet.', 'family-manager' ) ); ?></li>';
-                data.tasks.forEach((task) => {
+                list.innerHTML = data.households.length ? '' : '<li class="empty"><?php echo esc_js( __( 'You are not in any household yet.', 'households' ) ); ?></li>';
+                data.households.forEach((h) => {
                     const item = document.createElement('li');
-                    item.className = 'item' + (task.is_done === '1' ? ' done' : '');
-                    item.innerHTML = '<button class="secondary" type="button">' + (task.is_done === '1' ? '<?php echo esc_js( __( 'Undo', 'family-manager' ) ); ?>' : '<?php echo esc_js( __( 'Done', 'family-manager' ) ); ?>') + '</button><div><div class="title"></div><div class="meta"></div></div><span class="pill"></span>';
-                    item.querySelector('.title').textContent = task.title;
-                    item.querySelector('.meta').textContent = [task.member_name || '<?php echo esc_js( __( 'Household', 'family-manager' ) ); ?>', task.due_date || '<?php echo esc_js( __( 'No date', 'family-manager' ) ); ?>'].join(' · ');
-                    item.querySelector('.pill').textContent = task.task_type === 'appointment' ? '<?php echo esc_js( __( 'Appointment', 'family-manager' ) ); ?>' : (rewards && parseInt(task.points, 10) > 0 ? '+' + task.points : '');
-                    item.querySelector('.pill').hidden = !item.querySelector('.pill').textContent;
-                    item.querySelector('button').addEventListener('click', () => save({ family_action: 'toggle_task', task_id: task.id }));
-                    taskList.appendChild(item);
-                });
+                    item.className = 'household' + (h.is_last ? ' current' : '');
+                    item.innerHTML = '<div><h2><a class="name"></a><span class="pill" hidden><?php echo esc_js( __( 'Last opened', 'households' ) ); ?></span></h2><div class="meta here"></div><div class="meta"></div><div class="meta members"></div></div><div class="actions"></div>';
+                    const name = item.querySelector('.name');
+                    name.textContent = h.name;
+                    name.href = homeUrl(h.id);
+                    item.querySelector('.pill').hidden = !h.is_last;
+                    item.querySelector('.here').textContent = h.here_names.length
+                        ? '<?php echo esc_js( __( 'Here today:', 'households' ) ); ?> ' + h.here_names.join(', ')
+                        : '<?php echo esc_js( __( 'Nobody here today.', 'households' ) ); ?>';
+                    const counts = [
+                        (h.open_tasks === 1 ? '<?php echo esc_js( __( '1 open task', 'households' ) ); ?>' : '<?php echo esc_js( __( '%d open tasks', 'households' ) ); ?>'.replace('%d', h.open_tasks)),
+                        (h.appointments === 1 ? '<?php echo esc_js( __( '1 appointment', 'households' ) ); ?>' : '<?php echo esc_js( __( '%d appointments', 'households' ) ); ?>'.replace('%d', h.appointments))
+                    ];
+                    item.querySelector('.meta:not(.here):not(.members)').textContent = [h.role_label].concat(counts).join(' · ');
+                    item.querySelector('.members').textContent = h.member_names.length
+                        ? '<?php echo esc_js( __( 'Members:', 'households' ) ); ?> ' + h.member_names.join(', ')
+                        : '<?php echo esc_js( __( 'No members yet.', 'households' ) ); ?>';
 
-                memberList.innerHTML = data.members.length ? '' : '<li class="empty"><?php echo esc_js( __( 'No members yet.', 'family-manager' ) ); ?></li>';
-                data.members.forEach((member) => {
-                    const item = document.createElement('li');
-                    const isSelf = member.id === data.viewer.id;
-                    item.className = 'item';
-                    item.innerHTML = '<div class="member-actions"></div><a class="member-link"><div class="title"></div><div class="meta"></div></a><span class="pill"></span>';
-                    item.querySelector('.title').textContent = member.name;
-                    item.querySelector('.meta').textContent = member.role_label;
-                    item.querySelector('.pill').textContent = member.points + ' pts';
-                    item.querySelector('.pill').hidden = !rewards;
-                    const link = item.querySelector('.member-link');
-                    if (data.permissions.manage && !isSelf) {
-                        link.href = window.familyManager.memberUrl + member.id + '/';
-                        link.title = '<?php echo esc_js( __( 'View the app as this member', 'family-manager' ) ); ?>';
+                    const actions = item.querySelector('.actions');
+                    const open = document.createElement('a');
+                    open.className = 'primary';
+                    open.href = homeUrl(h.id);
+                    open.textContent = '<?php echo esc_js( __( 'Open', 'households' ) ); ?>';
+                    actions.appendChild(open);
+                    if (h.can_manage) {
+                        const manage = document.createElement('a');
+                        manage.href = homeUrl(h.id, 'manage/');
+                        manage.textContent = '<?php echo esc_js( __( 'Manage', 'households' ) ); ?>';
+                        actions.appendChild(manage);
                     }
-                    if (!data.permissions.viewing_as_other && (isSelf || data.viewer.can_organise)) {
-                        const profile = document.createElement('a');
-                        profile.href = window.familyManager.profileUrl + member.id + '/';
-                        profile.textContent = '<?php echo esc_js( __( 'Profile', 'family-manager' ) ); ?>';
-                        item.querySelector('.member-actions').appendChild(profile);
-                    }
-                    memberList.appendChild(item);
+                    list.appendChild(item);
                 });
-
-                birthdayList.innerHTML = data.birthdays.length ? '' : '<li class="empty"><?php echo esc_js( __( 'Add birthdays in the member profiles.', 'family-manager' ) ); ?></li>';
-                data.birthdays.forEach((b) => {
-                    const item = document.createElement('li');
-                    item.className = 'item';
-                    item.innerHTML = '<div></div><div><div class="title"></div><div class="meta"></div></div><span class="pill"></span>';
-                    item.querySelector('.title').textContent = b.name + ' ' + '<?php echo esc_js( __( 'turns', 'family-manager' ) ); ?>' + ' ' + b.turning;
-                    item.querySelector('.meta').textContent = b.date;
-                    item.querySelector('.pill').textContent = b.days_until === 0 ? '<?php echo esc_js( __( 'Today!', 'family-manager' ) ); ?>' : b.days_until + ' <?php echo esc_js( __( 'days', 'family-manager' ) ); ?>';
-                    birthdayList.appendChild(item);
-                });
-
-                rewardList.innerHTML = data.rewards.length ? '' : '<li class="empty"><?php echo esc_js( __( 'No rewards yet.', 'family-manager' ) ); ?></li>';
-                data.rewards.forEach((reward) => {
-                    const item = document.createElement('li');
-                    item.className = 'item';
-                    item.innerHTML = '<div></div><div><div class="title"></div><div class="meta"></div></div><span class="pill"></span>';
-                    item.querySelector('.title').textContent = reward.title;
-                    item.querySelector('.meta').textContent = reward.member_name || '<?php echo esc_js( __( 'Any member', 'family-manager' ) ); ?>';
-                    item.querySelector('.pill').textContent = reward.points + ' pts';
-                    rewardList.appendChild(item);
-                });
-
-                status.textContent = data.household.name + (data.permissions.viewing_as_other ? '' : ' · ' + data.viewer.role_label);
-                if (data.households.length > 1) {
-                    const link = document.createElement('a');
-                    link.href = window.familyManager.householdsUrl;
-                    link.textContent = data.households.length + ' <?php echo esc_js( __( 'households', 'family-manager' ) ); ?>';
-                    status.appendChild(document.createTextNode(' · '));
-                    status.appendChild(link);
-                }
+                status.textContent = '';
             }
 
-            function load() {
-                status.textContent = '<?php echo esc_js( __( 'Loading household...', 'family-manager' ) ); ?>';
-                request({ family_action: 'get' }).then((result) => {
+            const body = new FormData();
+            body.append('action', 'households_dashboard');
+            body.append('nonce', fm.nonce);
+            body.append('household_action', 'get_households');
+            fetch(fm.ajaxUrl, { method: 'POST', credentials: 'same-origin', body })
+                .then((response) => response.json())
+                .then((result) => {
                     if (!result.success) {
                         throw new Error(result.data && result.data.message ? result.data.message : 'Request failed');
                     }
                     render(result.data);
-                }).catch((error) => {
-                    status.textContent = error.message;
-                });
-            }
-
-            function save(payload) {
-                status.textContent = '<?php echo esc_js( __( 'Saving...', 'family-manager' ) ); ?>';
-                request(payload).then((result) => {
-                    if (!result.success) {
-                        throw new Error(result.data && result.data.message ? result.data.message : 'Request failed');
-                    }
-                    render(result.data);
-                }).catch((error) => {
-                    status.textContent = error.message;
-                });
-            }
-
-            app.querySelectorAll('form[data-action]').forEach((form) => {
-                form.addEventListener('submit', (event) => {
-                    event.preventDefault();
-                    const payload = { family_action: form.dataset.action };
-                    new FormData(form).forEach((value, key) => payload[key] = value);
-                    save(payload);
-                    form.reset();
-                });
-            });
-
-            load();
+                })
+                .catch((error) => status.textContent = error.message);
         })();
     </script>
 

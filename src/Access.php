@@ -1,6 +1,6 @@
 <?php
 
-namespace FamilyManager;
+namespace Households;
 
 /**
  * Answers "who may see or change what".
@@ -10,7 +10,7 @@ namespace FamilyManager;
  * household and a plain member of another.
  */
 class Access {
-    public const META_MEMBERS = '_family_manager_members';
+    public const META_MEMBERS = '_households_members';
 
     public const ROLE_ADMIN       = 'admin';
     public const ROLE_PARENT      = 'parent';
@@ -20,11 +20,11 @@ class Access {
 
     public static function roles(): array {
         return [
-            self::ROLE_ADMIN       => __( 'Administrator', 'family-manager' ),
-            self::ROLE_PARENT      => __( 'Parent', 'family-manager' ),
-            self::ROLE_CHILD       => __( 'Child', 'family-manager' ),
-            self::ROLE_GRANDPARENT => __( 'Grandparent', 'family-manager' ),
-            self::ROLE_CAREGIVER   => __( 'Caregiver', 'family-manager' ),
+            self::ROLE_ADMIN       => __( 'Administrator', 'households' ),
+            self::ROLE_PARENT      => __( 'Parent', 'households' ),
+            self::ROLE_CHILD       => __( 'Child', 'households' ),
+            self::ROLE_GRANDPARENT => __( 'Grandparent', 'households' ),
+            self::ROLE_CAREGIVER   => __( 'Caregiver', 'households' ),
         ];
     }
 
@@ -80,7 +80,7 @@ class Access {
             'orderby'          => 'ID',
             'order'            => 'ASC',
             'post_status'      => 'private',
-            'post_type'        => 'family_household',
+            'post_type'        => 'household',
             'suppress_filters' => false,
             'meta_query'       => [
                 [
