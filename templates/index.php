@@ -72,6 +72,8 @@
         .member-actions { display: flex; gap: 6px; align-items: center; }
         .member-actions select { min-height: 32px; width: auto; }
         .member-actions button { min-height: 32px; padding: 0 8px; }
+        .member-actions a { display: inline-flex; align-items: center; min-height: 32px; padding: 0 8px; border: 1px solid var(--fm-line); border-radius: 6px; color: var(--fm-accent-strong); font-size: 0.85rem; font-weight: 700; text-decoration: none; }
+        .birthday-list { display: grid; gap: 8px; margin: 0 0 18px; padding: 0; list-style: none; }
         [hidden] { display: none !important; }
         @media (max-width: 860px) {
             .topbar, .grid, .forms { grid-template-columns: 1fr; display: grid; }
@@ -145,6 +147,8 @@
                 <ul class="task-list" data-tasks></ul>
             </div>
             <div class="panel">
+                <h2><?php echo esc_html__( 'Upcoming Birthdays', 'family-manager' ); ?></h2>
+                <ul class="birthday-list" data-birthdays></ul>
                 <h2><?php echo esc_html__( 'Members', 'family-manager' ); ?></h2>
                 <ul class="member-list" data-members-list></ul>
                 <h2 style="margin-top:18px;"><?php echo esc_html__( 'Reward Ideas', 'family-manager' ); ?></h2>
@@ -159,6 +163,7 @@
             'nonce'   => wp_create_nonce( 'family_manager_app' ),
             'viewAs'  => (int) get_query_var( 'id' ),
             'memberUrl' => home_url( '/family-manager/member/' ),
+            'profileUrl' => home_url( '/family-manager/profile/' ),
         ] ); ?>;
     </script>
     <script>
@@ -168,6 +173,7 @@
             const taskList = app.querySelector('[data-tasks]');
             const memberList = app.querySelector('[data-members-list]');
             const rewardList = app.querySelector('[data-rewards]');
+            const birthdayList = app.querySelector('[data-birthdays]');
             const memberSelects = app.querySelectorAll('[data-members]');
             const stats = {
                 tasks: app.querySelector('[data-stat="tasks"]'),
@@ -257,8 +263,14 @@
                         link.href = window.familyManager.memberUrl + member.id + '/';
                         link.title = '<?php echo esc_js( __( 'View the app as this member', 'family-manager' ) ); ?>';
                     }
+                    const actions = item.querySelector('.member-actions');
+                    if (!data.permissions.viewing_as_other && (isSelf || data.viewer.can_organise)) {
+                        const profile = document.createElement('a');
+                        profile.href = window.familyManager.profileUrl + member.id + '/';
+                        profile.textContent = '<?php echo esc_js( __( 'Profile', 'family-manager' ) ); ?>';
+                        actions.appendChild(profile);
+                    }
                     if (data.permissions.manage && !isSelf && !data.permissions.viewing_as_other) {
-                        const actions = item.querySelector('.member-actions');
                         const select = document.createElement('select');
                         Object.keys(roleLabels).forEach((key) => {
                             const option = document.createElement('option');
@@ -284,6 +296,17 @@
                     memberList.appendChild(item);
                 });
 
+                birthdayList.innerHTML = data.birthdays.length ? '' : '<li class="empty"><?php echo esc_js( __( 'Add birthdays in the member profiles.', 'family-manager' ) ); ?></li>';
+                data.birthdays.forEach((b) => {
+                    const item = document.createElement('li');
+                    item.className = 'item';
+                    item.innerHTML = '<div></div><div><div class="title"></div><div class="meta"></div></div><span class="pill"></span>';
+                    item.querySelector('.title').textContent = b.name + ' ' + '<?php echo esc_js( __( 'turns', 'family-manager' ) ); ?>' + ' ' + b.turning;
+                    item.querySelector('.meta').textContent = b.date;
+                    item.querySelector('.pill').textContent = b.days_until === 0 ? '<?php echo esc_js( __( 'Today!', 'family-manager' ) ); ?>' : b.days_until + ' <?php echo esc_js( __( 'days', 'family-manager' ) ); ?>';
+                    birthdayList.appendChild(item);
+                });
+
                 rewardList.innerHTML = data.rewards.length ? '' : '<li class="empty"><?php echo esc_js( __( 'No rewards yet.', 'family-manager' ) ); ?></li>';
                 data.rewards.forEach((reward) => {
                     const item = document.createElement('li');
@@ -295,7 +318,7 @@
                     rewardList.appendChild(item);
                 });
 
-                status.textContent = data.household.name + (data.permissions.viewing_as_other ? '' : ' · ' + data.viewer.role_label);
+                status.textContent = data.household.name + (data.permissions.viewing_as_other ? '' : ' · ' + data.viewer.role_label) + (data.households.length > 1 ? ' · ' + data.households.length + ' <?php echo esc_js( __( 'households', 'family-manager' ) ); ?>' : '');
             }
 
             function load() {

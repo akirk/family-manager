@@ -20,10 +20,38 @@ class Storage {
 
     /* ---------------------------------------------------------------- Households */
 
-    public function get_or_create_household_for_user( int $user_id ): array {
+    public const META_CURRENT_HOUSEHOLD = '_family_manager_current_household';
+
+    /**
+     * The household a user is currently looking at: their remembered choice
+     * if they are still a member there, otherwise the first one they belong to.
+     */
+    public function current_household_id( int $user_id ): int {
         $households = Access::household_ids_for_user( $user_id );
-        if ( $households ) {
-            return $this->format_household( $households[0] );
+        if ( ! $households ) {
+            return 0;
+        }
+        $current = (int) get_user_meta( $user_id, self::META_CURRENT_HOUSEHOLD, true );
+        return in_array( $current, $households, true ) ? $current : $households[0];
+    }
+
+    public function switch_household( int $user_id, int $household_id ): bool {
+        if ( ! Access::is_member( $user_id, $household_id ) ) {
+            return false;
+        }
+        update_user_meta( $user_id, self::META_CURRENT_HOUSEHOLD, $household_id );
+        return true;
+    }
+
+    /** @return array[] formatted households the user belongs to. */
+    public function get_households_for_user( int $user_id ): array {
+        return array_values( array_filter( array_map( [ $this, 'format_household' ], Access::household_ids_for_user( $user_id ) ) ) );
+    }
+
+    public function get_or_create_household_for_user( int $user_id ): array {
+        $current = $this->current_household_id( $user_id );
+        if ( $current ) {
+            return $this->format_household( $current );
         }
 
         $user = get_userdata( $user_id );
@@ -68,7 +96,7 @@ class Storage {
 
         $household = $viewer_id === $subject_id
             ? $this->get_or_create_household_for_user( $subject_id )
-            : $this->format_household( Access::household_ids_for_user( $subject_id )[0] ?? 0 );
+            : $this->format_household( $this->household_for_viewing_as( $viewer_id, $subject_id ) );
         $household_id = isset( $household['id'] ) ? (int) $household['id'] : 0;
         if ( ! $household_id ) {
             return $this->empty_dashboard();
@@ -97,10 +125,30 @@ class Storage {
                 'viewing_as_other' => $viewer_id !== $subject_id,
             ],
             'roles'       => Access::roles(),
+            'households'  => $this->get_households_for_user( $viewer_id ),
             'members'     => $this->get_members( $household_id ),
+            'birthdays'   => $this->get_upcoming_birthdays( $household_id ),
             'tasks'       => $tasks,
             'rewards'     => $rewards,
         ];
+    }
+
+    /**
+     * Which household to show when a manager views as another member: the
+     * manager's current one if the subject belongs to it, else the first
+     * household the manager runs that the subject is part of.
+     */
+    private function household_for_viewing_as( int $viewer_id, int $subject_id ): int {
+        $current = $this->current_household_id( $viewer_id );
+        if ( $current && Access::is_member( $subject_id, $current ) && Access::can_manage( $viewer_id, $current ) ) {
+            return $current;
+        }
+        foreach ( Access::household_ids_for_user( $subject_id ) as $household_id ) {
+            if ( Access::can_manage( $viewer_id, $household_id ) ) {
+                return $household_id;
+            }
+        }
+        return 0;
     }
 
     private function empty_dashboard(): array {
@@ -110,7 +158,9 @@ class Storage {
             'subject'     => [],
             'permissions' => [ 'manage' => false, 'organise' => false, 'viewing_as_other' => false ],
             'roles'       => Access::roles(),
+            'households'  => [],
             'members'     => [],
+            'birthdays'   => [],
             'tasks'       => [],
             'rewards'     => [],
         ];
@@ -214,6 +264,82 @@ class Storage {
         $points = (int) get_user_meta( $user_id, self::META_POINTS, true ) + $delta;
         update_user_meta( $user_id, self::META_POINTS, $points );
         return $points;
+    }
+
+    /* ---------------------------------------------------------------- Profiles */
+
+    public const PROFILE_FIELDS = [
+        'birthdate'     => 'date',
+        'allergies'     => 'multiline',
+        'shoe_size'     => 'line',
+        'clothing_size' => 'line',
+        'notes'         => 'multiline',
+    ];
+
+    public function get_profile( int $user_id, int $household_id ): array {
+        $profile = $this->format_member( $user_id, $household_id );
+        if ( ! $profile ) {
+            return [];
+        }
+        foreach ( self::PROFILE_FIELDS as $field => $type ) {
+            $profile[ $field ] = (string) get_user_meta( $user_id, '_family_manager_' . $field, true );
+        }
+        $profile['age'] = $this->age_from_birthdate( $profile['birthdate'] );
+        return $profile;
+    }
+
+    public function save_profile( int $user_id, array $fields ): void {
+        foreach ( self::PROFILE_FIELDS as $field => $type ) {
+            if ( ! array_key_exists( $field, $fields ) ) {
+                continue;
+            }
+            $value = (string) $fields[ $field ];
+            if ( 'date' === $type ) {
+                $value = $this->normalize_date( $value );
+            } elseif ( 'multiline' === $type ) {
+                $value = sanitize_textarea_field( $value );
+            } else {
+                $value = sanitize_text_field( $value );
+            }
+            update_user_meta( $user_id, '_family_manager_' . $field, $value );
+        }
+    }
+
+    /** Members with a birthdate, ordered by how soon their next birthday is. */
+    public function get_upcoming_birthdays( int $household_id ): array {
+        $today = new \DateTimeImmutable( current_time( 'Y-m-d' ) );
+        $list = [];
+        foreach ( Access::members_of( $household_id ) as $user_id => $role ) {
+            $birthdate = (string) get_user_meta( $user_id, '_family_manager_birthdate', true );
+            if ( '' === $birthdate ) {
+                continue;
+            }
+            $born = \DateTimeImmutable::createFromFormat( '!Y-m-d', $birthdate );
+            if ( ! $born ) {
+                continue;
+            }
+            $next = $born->setDate( (int) $today->format( 'Y' ), (int) $born->format( 'm' ), (int) $born->format( 'd' ) );
+            if ( $next < $today ) {
+                $next = $next->modify( '+1 year' );
+            }
+            $user = get_userdata( $user_id );
+            $list[] = [
+                'id'          => $user_id,
+                'name'        => $user ? $user->display_name : '',
+                'date'        => $next->format( 'Y-m-d' ),
+                'days_until'  => (int) $today->diff( $next )->days,
+                'turning'     => (int) $next->format( 'Y' ) - (int) $born->format( 'Y' ),
+            ];
+        }
+        usort( $list, static function( array $a, array $b ): int {
+            return $a['days_until'] <=> $b['days_until'];
+        } );
+        return $list;
+    }
+
+    private function age_from_birthdate( string $birthdate ): ?int {
+        $born = '' !== $birthdate ? \DateTimeImmutable::createFromFormat( '!Y-m-d', $birthdate ) : null;
+        return $born ? (int) $born->diff( new \DateTimeImmutable( current_time( 'Y-m-d' ) ) )->y : null;
     }
 
     /* ---------------------------------------------------------------- Tasks */

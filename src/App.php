@@ -28,6 +28,8 @@ class App extends BaseApp {
         $this->app->add_role( 'member', __( 'Family Member', 'family-manager' ), [ 'read' => true ] );
 
         add_action( 'init', [ $this, 'register_post_types' ] );
+        add_action( 'init', [ $this, 'maybe_switch_household' ], 20 );
+        add_filter( 'login_redirect', [ $this, 'redirect_members_to_app' ], 10, 3 );
         add_action( 'wp_ajax_family_manager_dashboard', [ $this, 'handle_dashboard_request' ] );
     }
 
@@ -63,14 +65,66 @@ class App extends BaseApp {
         $this->app->route( '' );
         // A household administrator viewing the app as one of its members.
         $this->app->route( 'member/{id}', 'index.php' );
+        // A member's profile: birthday, allergies, sizes, notes.
+        $this->app->route( 'profile/{id}', 'profile.php' );
     }
 
     protected function setup_menu(): void {
-        $this->app->add_menu_item(
-            'dashboard',
-            __( 'Dashboard', 'family-manager' ),
-            home_url( '/' . $this->get_url_path() . '/' )
-        );
+        $base = home_url( '/' . $this->get_url_path() . '/' );
+        $this->app->add_menu_item( 'dashboard', __( 'Dashboard', 'family-manager' ), $base );
+
+        $user_id = get_current_user_id();
+        if ( ! $user_id ) {
+            return;
+        }
+
+        $current = $this->storage->current_household_id( $user_id );
+        $households = $this->storage->get_households_for_user( $user_id );
+        if ( count( $households ) > 1 ) {
+            foreach ( $households as $household ) {
+                $is_current = $household['id'] === $current;
+                $this->app->add_menu_item(
+                    'household-' . $household['id'],
+                    ( $is_current ? '● ' : '○ ' ) . $household['name'],
+                    add_query_arg( 'family_household', $household['id'], $base )
+                );
+            }
+        }
+
+        if ( $current && Access::can_manage( $user_id, $current ) ) {
+            $viewing_as = (int) get_query_var( 'id' );
+            $this->app->add_menu_item( 'view-self', __( 'My view', 'family-manager' ), $base );
+            foreach ( $this->storage->get_members( $current ) as $member ) {
+                if ( $member['id'] === $user_id ) {
+                    continue;
+                }
+                $this->app->add_menu_item(
+                    'view-as-' . $member['id'],
+                    sprintf( __( 'View as %s', 'family-manager' ), $member['name'] ),
+                    $base . 'member/' . $member['id'] . '/'
+                );
+            }
+        }
+
+        $this->app->add_user_menu_item( 'my-profile', __( 'My profile', 'family-manager' ), $base . 'profile/' . $user_id . '/' );
+    }
+
+    /** `?family_household=<id>` on any app URL switches the current household. */
+    public function maybe_switch_household(): void {
+        if ( ! isset( $_GET['family_household'] ) || ! is_user_logged_in() ) {
+            return;
+        }
+        $this->storage->switch_household( get_current_user_id(), absint( $_GET['family_household'] ) );
+        wp_safe_redirect( remove_query_arg( 'family_household' ) );
+        exit;
+    }
+
+    /** Members have nothing to do in wp-admin; send them to the app after login. */
+    public function redirect_members_to_app( $redirect_to, $requested, $user ) {
+        if ( $user instanceof \WP_User && in_array( Storage::WP_ROLE, (array) $user->roles, true ) ) {
+            return home_url( '/' . $this->get_url_path() . '/' );
+        }
+        return $redirect_to;
     }
 
     public function register_post_types(): void {
@@ -163,6 +217,24 @@ class App extends BaseApp {
                     return sanitize_text_field( $value );
             }
         };
+
+        // Profile actions address a member directly rather than a "view as" subject.
+        if ( 'get_profile' === $action || 'save_profile' === $action ) {
+            $member_id = $post( 'member_id', 'int' ) ?: $user_id;
+            $this->assert_allowed( Access::is_member( $member_id, $household_id ) && ( $member_id === $user_id || Access::can_view_user( $user_id, $member_id ) || $can_organise ) );
+            if ( 'save_profile' === $action ) {
+                $fields = [];
+                foreach ( array_keys( Storage::PROFILE_FIELDS ) as $field ) {
+                    $fields[ $field ] = $post( $field, 'raw' );
+                }
+                $this->storage->save_profile( $member_id, $fields );
+            }
+            wp_send_json_success( [
+                'profile'     => $this->storage->get_profile( $member_id, $household_id ),
+                'household'   => $dashboard['household'],
+                'permissions' => [ 'edit' => true ],
+            ] );
+        }
 
         switch ( $action ) {
             case 'add_member':
