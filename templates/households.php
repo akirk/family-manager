@@ -57,60 +57,60 @@
 <body>
     <?php wp_app_body_open(); ?>
 
-    <main id="family-manager-households">
-        <a class="back" href="<?php echo esc_url( home_url( '/family-manager/' ) ); ?>">&larr; <?php echo esc_html__( 'Dashboard', 'family-manager' ); ?></a>
-        <h1><?php echo esc_html__( 'Your households', 'family-manager' ); ?></h1>
-        <p class="subtitle"><?php echo esc_html__( 'You belong to more than one household. Pick which one the dashboard shows.', 'family-manager' ); ?></p>
-        <div class="status" data-status><?php echo esc_html__( 'Loading...', 'family-manager' ); ?></div>
+    <main id="households-households">
+        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Dashboard', 'households' ); ?></a>
+        <h1><?php echo esc_html__( 'Your households', 'households' ); ?></h1>
+        <p class="subtitle"><?php echo esc_html__( 'You belong to more than one household. Pick which one the dashboard shows.', 'households' ); ?></p>
+        <div class="status" data-status><?php echo esc_html__( 'Loading...', 'households' ); ?></div>
         <ul class="household-list" data-households></ul>
     </main>
 
     <script>
-        window.familyManager = <?php echo wp_json_encode( [
+        window.households = <?php echo wp_json_encode( [
             'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
-            'nonce'        => wp_create_nonce( 'family_manager_app' ),
-            'dashboardUrl' => home_url( '/family-manager/' ),
-            'householdUrl' => home_url( '/family-manager/household/' ),
+            'nonce'        => wp_create_nonce( 'households_app' ),
+            'dashboardUrl' => home_url( '/households/' ),
+            'householdUrl' => home_url( '/households/household/' ),
         ] ); ?>;
     </script>
     <script>
         (function() {
-            const root = document.getElementById('family-manager-households');
+            const root = document.getElementById('households-households');
             const status = root.querySelector('[data-status]');
             const list = root.querySelector('[data-households]');
-            const fm = window.familyManager;
+            const fm = window.households;
 
             function switchUrl(base, id) {
-                return base + (base.indexOf('?') === -1 ? '?' : '&') + 'family_household=' + id;
+                return base + (base.indexOf('?') === -1 ? '?' : '&') + 'household=' + id;
             }
 
             function render(data) {
-                list.innerHTML = data.households.length ? '' : '<li class="empty"><?php echo esc_js( __( 'You are not in any household yet.', 'family-manager' ) ); ?></li>';
+                list.innerHTML = data.households.length ? '' : '<li class="empty"><?php echo esc_js( __( 'You are not in any household yet.', 'households' ) ); ?></li>';
                 data.households.forEach((h) => {
                     const item = document.createElement('li');
                     item.className = 'household' + (h.is_current ? ' current' : '');
-                    item.innerHTML = '<div><h2><span class="name"></span><span class="pill" hidden><?php echo esc_js( __( 'Current', 'family-manager' ) ); ?></span></h2><div class="meta"></div><div class="meta members"></div></div><div class="actions"></div>';
+                    item.innerHTML = '<div><h2><span class="name"></span><span class="pill" hidden><?php echo esc_js( __( 'Current', 'households' ) ); ?></span></h2><div class="meta"></div><div class="meta members"></div></div><div class="actions"></div>';
                     item.querySelector('.name').textContent = h.name;
                     item.querySelector('.pill').hidden = !h.is_current;
                     const counts = [
-                        (h.open_tasks === 1 ? '<?php echo esc_js( __( '1 open task', 'family-manager' ) ); ?>' : '<?php echo esc_js( __( '%d open tasks', 'family-manager' ) ); ?>'.replace('%d', h.open_tasks)),
-                        (h.appointments === 1 ? '<?php echo esc_js( __( '1 appointment', 'family-manager' ) ); ?>' : '<?php echo esc_js( __( '%d appointments', 'family-manager' ) ); ?>'.replace('%d', h.appointments))
+                        (h.open_tasks === 1 ? '<?php echo esc_js( __( '1 open task', 'households' ) ); ?>' : '<?php echo esc_js( __( '%d open tasks', 'households' ) ); ?>'.replace('%d', h.open_tasks)),
+                        (h.appointments === 1 ? '<?php echo esc_js( __( '1 appointment', 'households' ) ); ?>' : '<?php echo esc_js( __( '%d appointments', 'households' ) ); ?>'.replace('%d', h.appointments))
                     ];
                     item.querySelector('.meta').textContent = [h.role_label].concat(counts).join(' · ');
                     item.querySelector('.members').textContent = h.member_names.length
-                        ? '<?php echo esc_js( __( 'Members:', 'family-manager' ) ); ?> ' + h.member_names.join(', ')
-                        : '<?php echo esc_js( __( 'No members yet.', 'family-manager' ) ); ?>';
+                        ? '<?php echo esc_js( __( 'Members:', 'households' ) ); ?> ' + h.member_names.join(', ')
+                        : '<?php echo esc_js( __( 'No members yet.', 'households' ) ); ?>';
 
                     const actions = item.querySelector('.actions');
                     const open = document.createElement('a');
                     open.className = 'primary';
                     open.href = h.is_current ? fm.dashboardUrl : switchUrl(fm.dashboardUrl, h.id);
-                    open.textContent = h.is_current ? '<?php echo esc_js( __( 'Open dashboard', 'family-manager' ) ); ?>' : '<?php echo esc_js( __( 'Switch to this household', 'family-manager' ) ); ?>';
+                    open.textContent = h.is_current ? '<?php echo esc_js( __( 'Open dashboard', 'households' ) ); ?>' : '<?php echo esc_js( __( 'Switch to this household', 'households' ) ); ?>';
                     actions.appendChild(open);
                     if (h.can_manage) {
                         const manage = document.createElement('a');
                         manage.href = h.is_current ? fm.householdUrl : switchUrl(fm.householdUrl, h.id);
-                        manage.textContent = '<?php echo esc_js( __( 'Manage', 'family-manager' ) ); ?>';
+                        manage.textContent = '<?php echo esc_js( __( 'Manage', 'households' ) ); ?>';
                         actions.appendChild(manage);
                     }
                     list.appendChild(item);
@@ -119,9 +119,9 @@
             }
 
             const body = new FormData();
-            body.append('action', 'family_manager_dashboard');
+            body.append('action', 'households_dashboard');
             body.append('nonce', fm.nonce);
-            body.append('family_action', 'get_households');
+            body.append('household_action', 'get_households');
             fetch(fm.ajaxUrl, { method: 'POST', credentials: 'same-origin', body })
                 .then((response) => response.json())
                 .then((result) => {

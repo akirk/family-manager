@@ -1,6 +1,6 @@
 {
-    "name": "family-manager/family-manager",
-    "description": "Family Manager - A WordPress app powered by WpApp",
+    "name": "households/households",
+    "description": "Households - A WordPress app powered by WpApp",
     "type": "wordpress-plugin",
     "license": "GPL-2.0-or-later",
     "require": {
@@ -9,7 +9,7 @@
     },
     "autoload": {
         "psr-4": {
-            "FamilyManager\\": "src/"
+            "Households\\": "src/"
         }
     },
     "version": "0.1.0",
@@ -19,6 +19,6 @@
         }
     ],
     "config": {
-        "autoloader-suffix": "familymanager"
+        "autoloader-suffix": "households"
     }
 }

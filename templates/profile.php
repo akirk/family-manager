@@ -56,58 +56,58 @@
 </head>
 <body>
     <?php wp_app_body_open(); ?>
-    <main id="family-manager-profile">
-        <a class="back" href="<?php echo esc_url( home_url( '/family-manager/' ) ); ?>">&larr; <?php echo esc_html__( 'Dashboard', 'family-manager' ); ?></a>
-        <h1 data-name><?php echo esc_html__( 'Profile', 'family-manager' ); ?></h1>
+    <main id="households-profile">
+        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Dashboard', 'households' ); ?></a>
+        <h1 data-name><?php echo esc_html__( 'Profile', 'households' ); ?></h1>
         <p class="subtitle" data-subtitle></p>
 
         <section class="facts" data-facts hidden>
-            <div class="fact"><strong data-fact="age">–</strong><span><?php echo esc_html__( 'Age', 'family-manager' ); ?></span></div>
-            <div class="fact"><strong data-fact="shoe_size">–</strong><span><?php echo esc_html__( 'Shoe size', 'family-manager' ); ?></span></div>
-            <div class="fact"><strong data-fact="clothing_size">–</strong><span><?php echo esc_html__( 'Clothing size', 'family-manager' ); ?></span></div>
-            <div class="fact allergy"><strong data-fact="allergies">–</strong><span><?php echo esc_html__( 'Allergies', 'family-manager' ); ?></span></div>
+            <div class="fact"><strong data-fact="age">–</strong><span><?php echo esc_html__( 'Age', 'households' ); ?></span></div>
+            <div class="fact"><strong data-fact="shoe_size">–</strong><span><?php echo esc_html__( 'Shoe size', 'households' ); ?></span></div>
+            <div class="fact"><strong data-fact="clothing_size">–</strong><span><?php echo esc_html__( 'Clothing size', 'households' ); ?></span></div>
+            <div class="fact allergy"><strong data-fact="allergies">–</strong><span><?php echo esc_html__( 'Allergies', 'households' ); ?></span></div>
         </section>
 
         <div class="panel">
             <form data-profile-form>
                 <div class="two">
-                    <label><?php echo esc_html__( 'Birthday', 'family-manager' ); ?><input type="date" name="birthdate"></label>
-                    <label><?php echo esc_html__( 'Shoe size', 'family-manager' ); ?><input name="shoe_size"></label>
+                    <label><?php echo esc_html__( 'Birthday', 'households' ); ?><input type="date" name="birthdate"></label>
+                    <label><?php echo esc_html__( 'Shoe size', 'households' ); ?><input name="shoe_size"></label>
                 </div>
                 <div class="two">
-                    <label><?php echo esc_html__( 'Clothing size', 'family-manager' ); ?><input name="clothing_size"></label>
+                    <label><?php echo esc_html__( 'Clothing size', 'households' ); ?><input name="clothing_size"></label>
                 </div>
-                <label><?php echo esc_html__( 'Allergies and intolerances', 'family-manager' ); ?><small><?php echo esc_html__( 'One per line. Shown prominently to everyone in the household.', 'family-manager' ); ?></small><textarea name="allergies"></textarea></label>
-                <label><?php echo esc_html__( 'Quick notes', 'family-manager' ); ?><small><?php echo esc_html__( 'Doctor, school, medication, whatever the next person needs to know.', 'family-manager' ); ?></small><textarea name="notes"></textarea></label>
+                <label><?php echo esc_html__( 'Allergies and intolerances', 'households' ); ?><small><?php echo esc_html__( 'One per line. Shown prominently to everyone in the household.', 'households' ); ?></small><textarea name="allergies"></textarea></label>
+                <label><?php echo esc_html__( 'Quick notes', 'households' ); ?><small><?php echo esc_html__( 'Doctor, school, medication, whatever the next person needs to know.', 'households' ); ?></small><textarea name="notes"></textarea></label>
                 <div class="actions">
-                    <div class="status" data-status><?php echo esc_html__( 'Loading...', 'family-manager' ); ?></div>
-                    <button type="submit"><?php echo esc_html__( 'Save profile', 'family-manager' ); ?></button>
+                    <div class="status" data-status><?php echo esc_html__( 'Loading...', 'households' ); ?></div>
+                    <button type="submit"><?php echo esc_html__( 'Save profile', 'households' ); ?></button>
                 </div>
             </form>
         </div>
     </main>
 
     <script>
-        window.familyManager = <?php echo wp_json_encode( [
+        window.households = <?php echo wp_json_encode( [
             'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
-            'nonce'    => wp_create_nonce( 'family_manager_app' ),
+            'nonce'    => wp_create_nonce( 'households_app' ),
             'memberId' => (int) get_query_var( 'id' ),
         ] ); ?>;
     </script>
     <script>
         (function() {
-            const root = document.getElementById('family-manager-profile');
+            const root = document.getElementById('households-profile');
             const form = root.querySelector('[data-profile-form]');
             const status = root.querySelector('[data-status]');
             const facts = root.querySelector('[data-facts]');
 
             function request(payload) {
                 const body = new FormData();
-                body.append('action', 'family_manager_dashboard');
-                body.append('nonce', window.familyManager.nonce);
-                body.append('member_id', window.familyManager.memberId);
+                body.append('action', 'households_dashboard');
+                body.append('nonce', window.households.nonce);
+                body.append('member_id', window.households.memberId);
                 Object.keys(payload || {}).forEach((key) => body.append(key, payload[key]));
-                return fetch(window.familyManager.ajaxUrl, { method: 'POST', credentials: 'same-origin', body })
+                return fetch(window.households.ajaxUrl, { method: 'POST', credentials: 'same-origin', body })
                     .then((response) => response.json())
                     .then((result) => {
                         if (!result.success) {
@@ -125,7 +125,7 @@
                 root.querySelector('[data-fact="age"]').textContent = p.age === null ? '–' : p.age;
                 root.querySelector('[data-fact="shoe_size"]').textContent = p.shoe_size || '–';
                 root.querySelector('[data-fact="clothing_size"]').textContent = p.clothing_size || '–';
-                root.querySelector('[data-fact="allergies"]').textContent = p.allergies ? p.allergies.split('\n').filter(Boolean).join(', ') : '<?php echo esc_js( __( 'None', 'family-manager' ) ); ?>';
+                root.querySelector('[data-fact="allergies"]').textContent = p.allergies ? p.allergies.split('\n').filter(Boolean).join(', ') : '<?php echo esc_js( __( 'None', 'households' ) ); ?>';
                 ['birthdate', 'shoe_size', 'clothing_size', 'allergies', 'notes'].forEach((field) => {
                     form.elements[field].value = p[field] || '';
                 });
@@ -135,13 +135,13 @@
 
             form.addEventListener('submit', (event) => {
                 event.preventDefault();
-                status.textContent = '<?php echo esc_js( __( 'Saving...', 'family-manager' ) ); ?>';
-                const payload = { family_action: 'save_profile' };
+                status.textContent = '<?php echo esc_js( __( 'Saving...', 'households' ) ); ?>';
+                const payload = { household_action: 'save_profile' };
                 new FormData(form).forEach((value, key) => payload[key] = value);
-                request(payload).then((data) => { render(data); status.textContent = '<?php echo esc_js( __( 'Saved.', 'family-manager' ) ); ?>'; }).catch((error) => status.textContent = error.message);
+                request(payload).then((data) => { render(data); status.textContent = '<?php echo esc_js( __( 'Saved.', 'households' ) ); ?>'; }).catch((error) => status.textContent = error.message);
             });
 
-            request({ family_action: 'get_profile' }).then(render).catch((error) => status.textContent = error.message);
+            request({ household_action: 'get_profile' }).then(render).catch((error) => status.textContent = error.message);
         })();
     </script>
 

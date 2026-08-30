@@ -1,15 +1,15 @@
 <?php
 /**
- * Plugin Name: Family Manager
- * Description: A WpApp household dashboard for family tasks, appointments, and rewards.
+ * Plugin Name: Households
+ * Description: A WpApp dashboard for a household, or for several: who is at which home, shared tasks and appointments, and what each house needs people to know.
  * Version: 1.1.0
  * Author: Alex Kirk
- * Text Domain: family-manager
+ * Text Domain: households
  * Tested up to: 7.1
  * Requires PHP: 7.4
  */
 
-namespace FamilyManager;
+namespace Households;
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
@@ -19,7 +19,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 // Autoloader for plugin classes.
 spl_autoload_register( function( $class ) {
-    $prefix = 'FamilyManager\\';
+    $prefix = 'Households\\';
     $len = strlen( $prefix );
     if ( strncmp( $prefix, $class, $len ) !== 0 ) {
         return;

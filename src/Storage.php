@@ -1,28 +1,28 @@
 <?php
 
-namespace FamilyManager;
+namespace Households;
 
 /**
  * Persistence for households, members, tasks and rewards.
  *
- * Members are WordPress users. Each member also has a `family_member` term
+ * Members are WordPress users. Each member also has a `household_member` term
  * (slug `user-<id>`) which is only used to tag tasks and rewards with the
  * member they are assigned to; everything else about a member lives in user
  * meta and in the household's membership map (see Access).
  */
 class Storage {
-    public const MEMBER_TAXONOMY = 'family_member';
-    public const WP_ROLE         = 'family_manager_member';
+    public const MEMBER_TAXONOMY = 'household_member';
+    public const WP_ROLE         = 'households_member';
 
-    public const META_HOUSEHOLD_ID = '_family_manager_household_id';
-    public const META_USER_ID      = '_family_manager_user_id';
-    public const META_POINTS       = '_family_manager_points';
+    public const META_HOUSEHOLD_ID = '_households_household_id';
+    public const META_USER_ID      = '_households_user_id';
+    public const META_POINTS       = '_households_points';
     /** Household setting: whether tasks earn points and rewards are shown. Off by default. */
-    public const META_REWARDS      = '_family_manager_rewards_enabled';
+    public const META_REWARDS      = '_households_rewards_enabled';
 
     /* ---------------------------------------------------------------- Households */
 
-    public const META_CURRENT_HOUSEHOLD = '_family_manager_current_household';
+    public const META_CURRENT_HOUSEHOLD = '_households_current_household';
 
     /**
      * The household a user is currently looking at: their remembered choice
@@ -99,7 +99,7 @@ class Storage {
         }
 
         $user = get_userdata( $user_id );
-        $name = $user && $user->display_name ? sprintf( __( '%s Household', 'family-manager' ), $user->display_name ) : __( 'My Household', 'family-manager' );
+        $name = $user && $user->display_name ? sprintf( __( '%s Household', 'households' ), $user->display_name ) : __( 'My Household', 'households' );
         $household_id = $this->create_household( $name, $user_id );
 
         return $household_id ? $this->format_household( $household_id ) : [];
@@ -110,7 +110,7 @@ class Storage {
             'post_author' => $admin_user_id,
             'post_status' => 'private',
             'post_title'  => $name,
-            'post_type'   => 'family_household',
+            'post_type'   => 'household',
         ], true );
 
         if ( is_wp_error( $household_id ) ) {
@@ -193,6 +193,8 @@ class Storage {
             'households'  => $this->get_households_for_user( $viewer_id ),
             'members'     => $this->get_members( $household_id ),
             'birthdays'   => $this->get_upcoming_birthdays( $household_id ),
+            'whereabouts' => $this->get_whereabouts_summary( $household_id ),
+            'info'        => $this->get_household_info( $household_id ),
             'tasks'       => $tasks,
             'rewards'     => $rewards,
         ];
@@ -226,6 +228,8 @@ class Storage {
             'households'  => [],
             'members'     => [],
             'birthdays'   => [],
+            'whereabouts' => [ 'members' => [], 'next_handoff' => null ],
+            'info'        => [],
             'tasks'       => [],
             'rewards'     => [],
         ];
@@ -347,7 +351,7 @@ class Storage {
             return [];
         }
         foreach ( self::PROFILE_FIELDS as $field => $type ) {
-            $profile[ $field ] = (string) get_user_meta( $user_id, '_family_manager_' . $field, true );
+            $profile[ $field ] = (string) get_user_meta( $user_id, '_households_' . $field, true );
         }
         $profile['age'] = $this->age_from_birthdate( $profile['birthdate'] );
         return $profile;
@@ -366,7 +370,7 @@ class Storage {
             } else {
                 $value = sanitize_text_field( $value );
             }
-            update_user_meta( $user_id, '_family_manager_' . $field, $value );
+            update_user_meta( $user_id, '_households_' . $field, $value );
         }
     }
 
@@ -375,7 +379,7 @@ class Storage {
         $today = new \DateTimeImmutable( current_time( 'Y-m-d' ) );
         $list = [];
         foreach ( Access::members_of( $household_id ) as $user_id => $role ) {
-            $birthdate = (string) get_user_meta( $user_id, '_family_manager_birthdate', true );
+            $birthdate = (string) get_user_meta( $user_id, '_households_birthdate', true );
             if ( '' === $birthdate ) {
                 continue;
             }
@@ -407,10 +411,292 @@ class Storage {
         return $born ? (int) $born->diff( new \DateTimeImmutable( current_time( 'Y-m-d' ) ) )->y : null;
     }
 
+    /* ---------------------------------------------------------------- Whereabouts */
+
+    /**
+     * The whereabouts board: a day-by-day grid of which home each member is at,
+     * plus the handovers those days imply.
+     *
+     * Everything is expressed from `$household_id`'s point of view — `is_here`
+     * is what someone standing in this kitchen wants to know.
+     */
+    public function get_whereabouts_board( int $household_id, string $start = '', int $days = 14 ): array {
+        $days = max( 1, min( 56, $days ) );
+        $start = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $start ) ? $start : current_time( 'Y-m-d' );
+        $today = current_time( 'Y-m-d' );
+
+        $dates = [];
+        $cursor = new \DateTimeImmutable( $start, new \DateTimeZone( 'UTC' ) );
+        for ( $i = 0; $i < $days; $i++ ) {
+            $dates[] = [
+                'date'       => $cursor->format( 'Y-m-d' ),
+                'weekday'    => wp_date( 'D', $cursor->getTimestamp(), new \DateTimeZone( 'UTC' ) ),
+                'day'        => $cursor->format( 'j' ),
+                'month'      => wp_date( 'M', $cursor->getTimestamp(), new \DateTimeZone( 'UTC' ) ),
+                'is_today'   => $cursor->format( 'Y-m-d' ) === $today,
+                'is_weekend' => in_array( (int) $cursor->format( 'N' ), [ 6, 7 ], true ),
+            ];
+            $cursor = $cursor->modify( '+1 day' );
+        }
+
+        $members = $this->members_with_days( $household_id, $start, $days );
+
+        return [
+            'start'      => $start,
+            'days'       => $days,
+            'today'      => $today,
+            'dates'      => $dates,
+            'members'    => $members,
+            'handoffs'   => $this->collect_handoffs( $members, $household_id ),
+            'patterns'   => $this->format_patterns(),
+            'households' => $this->get_households_in_play( $household_id ),
+        ];
+    }
+
+    /**
+     * The short answer for the dashboard: who is where today, and the next
+     * handover coming up.
+     */
+    public function get_whereabouts_summary( int $household_id ): array {
+        $today = current_time( 'Y-m-d' );
+        $members = $this->members_with_days( $household_id, $today, 28 );
+        $handoffs = $this->collect_handoffs( $members, $household_id );
+
+        $summary = [];
+        foreach ( $members as $member ) {
+            if ( ! $member['has_rotation'] ) {
+                continue;
+            }
+            unset( $member['days'], $member['rotation'], $member['homes'] );
+            $summary[] = $member;
+        }
+
+        return [
+            'members'      => $summary,
+            'next_handoff' => $handoffs ? $handoffs[0] : null,
+        ];
+    }
+
+    /** @return array[] every member of the household, with their days filled in. */
+    private function members_with_days( int $household_id, string $start, int $days ): array {
+        $out = [];
+        foreach ( $this->get_members( $household_id ) as $member ) {
+            $out[] = $this->format_whereabouts_member( $member, $household_id, $start, $days );
+        }
+        return $out;
+    }
+
+    /** @param array $member A member as returned by format_member(). */
+    private function format_whereabouts_member( array $member, int $household_id, string $start, int $days ): array {
+        $user_id = (int) $member['id'];
+        $rotation = Whereabouts::get_rotation( $user_id );
+        $homes = Access::household_ids_for_user( $user_id );
+        $names = $this->household_names( array_unique( array_merge( $homes, $rotation ? $rotation['homes'] : [] ) ) );
+
+        $formatted = [
+            'id'           => $user_id,
+            'name'         => $member['name'],
+            'role_label'   => $member['role_label'],
+            'has_rotation' => (bool) $rotation,
+            'can_rotate'   => count( $homes ) > 1,
+            'rotation'     => $rotation ?: [],
+            'homes'        => array_map( static function( int $id ) use ( $names ): array {
+                return [ 'id' => $id, 'name' => $names[ $id ] ?? '' ];
+            }, $homes ),
+            'days'         => [],
+        ];
+
+        foreach ( Whereabouts::days_for_member( $user_id, $start, $days ) as $day ) {
+            $formatted['days'][] = [
+                'date'           => $day['date'],
+                'household_id'   => $day['household_id'],
+                'household_name' => $names[ $day['household_id'] ] ?? '',
+                'is_here'        => $day['household_id'] === $household_id,
+                'is_override'    => $day['is_override'],
+            ];
+        }
+
+        $formatted['now'] = $this->format_current_stay( $user_id, $household_id, $homes, $names );
+
+        return $formatted;
+    }
+
+    /**
+     * Where a member is today and when that changes.
+     *
+     * Someone with no rotation who belongs to this household alone is simply
+     * here; someone with several homes and no rotation could be anywhere, and
+     * saying so is more use than guessing.
+     */
+    private function format_current_stay( int $user_id, int $household_id, array $homes, array $names ): array {
+        $today = current_time( 'Y-m-d' );
+        $where = Whereabouts::home_on( $user_id, $today );
+
+        if ( ! $where['household_id'] ) {
+            if ( count( $homes ) > 1 ) {
+                return [];
+            }
+            return [
+                'date'           => $today,
+                'household_id'   => $household_id,
+                'household_name' => $names[ $household_id ] ?? '',
+                'is_here'        => true,
+                'until'          => '',
+                'next_name'      => '',
+            ];
+        }
+
+        $ends = Whereabouts::stay_ends( $user_id, $today );
+
+        return [
+            'date'           => $today,
+            'household_id'   => $where['household_id'],
+            'household_name' => $names[ $where['household_id'] ] ?? '',
+            'is_here'        => $where['household_id'] === $household_id,
+            'until'          => $ends ? $ends['until'] : '',
+            'next_name'      => $ends ? ( $names[ $ends['next_household_id'] ] ?? '' ) : '',
+        ];
+    }
+
+    /**
+     * Turn day-by-day whereabouts into handovers: people changing home on the
+     * same day in the same direction are one handover, because that is one trip.
+     *
+     * @param array[] $members As built by format_whereabouts_member().
+     */
+    private function collect_handoffs( array $members, int $household_id ): array {
+        $grouped = [];
+        foreach ( $members as $member ) {
+            $time = $member['rotation']['changeover_time'] ?? Whereabouts::DEFAULT_CHANGEOVER_TIME;
+            $previous = null;
+            foreach ( $member['days'] as $day ) {
+                if ( null !== $previous && $day['household_id'] !== $previous['household_id'] ) {
+                    $key = $day['date'] . ':' . $previous['household_id'] . ':' . $day['household_id'];
+                    if ( ! isset( $grouped[ $key ] ) ) {
+                        $grouped[ $key ] = [
+                            'date'      => $day['date'],
+                            'time'      => $time,
+                            'from_id'   => $previous['household_id'],
+                            'from_name' => $previous['household_name'],
+                            'to_id'     => $day['household_id'],
+                            'to_name'   => $day['household_name'],
+                            'direction' => $previous['household_id'] === $household_id ? 'out' : ( $day['household_id'] === $household_id ? 'in' : 'elsewhere' ),
+                            'members'   => [],
+                        ];
+                    }
+                    $grouped[ $key ]['members'][] = $member['name'];
+                }
+                $previous = $day;
+            }
+        }
+
+        $handoffs = array_values( $grouped );
+        usort( $handoffs, static function( array $a, array $b ): int {
+            return [ $a['date'], $a['time'] ] <=> [ $b['date'], $b['time'] ];
+        } );
+
+        return $handoffs;
+    }
+
+    /** Every household this one's members belong to, for the rotation form and the dial. */
+    private function get_households_in_play( int $household_id ): array {
+        $ids = [ $household_id ];
+        foreach ( $this->get_members( $household_id ) as $member ) {
+            $ids = array_merge( $ids, Access::household_ids_for_user( (int) $member['id'] ) );
+        }
+        $ids = array_unique( $ids );
+        // A stable order keeps each home the same colour from one view to the next.
+        sort( $ids );
+        $out = [];
+        foreach ( $this->household_names( $ids ) as $id => $name ) {
+            $out[] = [ 'id' => $id, 'name' => $name ];
+        }
+        return $out;
+    }
+
+    /** @param int[] $household_ids @return array<int,string> */
+    private function household_names( array $household_ids ): array {
+        $names = [];
+        foreach ( $household_ids as $id ) {
+            $household = $this->format_household( (int) $id );
+            if ( $household ) {
+                $names[ (int) $id ] = $household['name'];
+            }
+        }
+        return $names;
+    }
+
+    private function format_patterns(): array {
+        $out = [];
+        foreach ( Whereabouts::patterns() as $key => $pattern ) {
+            $out[] = [
+                'key'        => $key,
+                'label'      => $pattern['label'],
+                'start_hint' => $pattern['start_hint'],
+                'cycle'      => $pattern['cycle'],
+                'homes'      => $pattern['homes'],
+            ];
+        }
+        return $out;
+    }
+
+    /* ---------------------------------------------------------------- House info */
+
+    public const META_INFO = '_households_info';
+
+    /**
+     * The things about a house that everyone ends up asking: the wifi code,
+     * where the water main valve is, which day the bins go out.
+     *
+     * It belongs to the household rather than to a member, because it is true
+     * of the place. Everyone who belongs there can read it — that is the point
+     * of writing it down — so it is not the place for anything that should not
+     * be shared with the whole household.
+     *
+     * @return array[] each with a label and a detail.
+     */
+    public function get_household_info( int $household_id ): array {
+        $stored = get_post_meta( $household_id, self::META_INFO, true );
+        if ( ! is_array( $stored ) ) {
+            return [];
+        }
+        $info = [];
+        foreach ( $stored as $entry ) {
+            $label = isset( $entry['label'] ) ? trim( (string) $entry['label'] ) : '';
+            if ( '' === $label ) {
+                continue;
+            }
+            $info[] = [
+                'label'  => $label,
+                'detail' => isset( $entry['detail'] ) ? (string) $entry['detail'] : '',
+            ];
+        }
+        return $info;
+    }
+
+    public function add_household_info( int $household_id, string $label, string $detail ): bool {
+        $label = sanitize_text_field( $label );
+        if ( '' === trim( $label ) ) {
+            return false;
+        }
+        $info = $this->get_household_info( $household_id );
+        $info[] = [ 'label' => $label, 'detail' => sanitize_textarea_field( $detail ) ];
+        update_post_meta( $household_id, self::META_INFO, $info );
+        return true;
+    }
+
+    public function remove_household_info( int $household_id, int $index ): void {
+        $info = $this->get_household_info( $household_id );
+        if ( ! isset( $info[ $index ] ) ) {
+            return;
+        }
+        unset( $info[ $index ] );
+        update_post_meta( $household_id, self::META_INFO, array_values( $info ) );
+    }
     /* ---------------------------------------------------------------- Tasks */
 
     public function get_tasks( int $household_id ): array {
-        $tasks = array_map( [ $this, 'format_task' ], $this->get_related_posts( $household_id, 'family_task' ) );
+        $tasks = array_map( [ $this, 'format_task' ], $this->get_related_posts( $household_id, 'household_task' ) );
         usort( $tasks, static function( array $a, array $b ): int {
             if ( $a['is_done'] !== $b['is_done'] ) {
                 return (int) $a['is_done'] <=> (int) $b['is_done'];
@@ -427,7 +713,7 @@ class Storage {
             'post_parent' => $household_id,
             'post_status' => 'private',
             'post_title'  => $title,
-            'post_type'   => 'family_task',
+            'post_type'   => 'household_task',
         ], true );
 
         if ( is_wp_error( $task_id ) ) {
@@ -435,10 +721,10 @@ class Storage {
         }
 
         update_post_meta( $task_id, self::META_HOUSEHOLD_ID, $household_id );
-        update_post_meta( $task_id, '_family_manager_task_type', in_array( $task_type, [ 'task', 'appointment' ], true ) ? $task_type : 'task' );
+        update_post_meta( $task_id, '_households_task_type', in_array( $task_type, [ 'task', 'appointment' ], true ) ? $task_type : 'task' );
         update_post_meta( $task_id, self::META_POINTS, $points );
-        update_post_meta( $task_id, '_family_manager_due_date', $this->normalize_date( $due_date ) );
-        update_post_meta( $task_id, '_family_manager_is_done', 0 );
+        update_post_meta( $task_id, '_households_due_date', $this->normalize_date( $due_date ) );
+        update_post_meta( $task_id, '_households_is_done', 0 );
         $this->assign_member( $task_id, $member_id );
 
         return (int) $task_id;
@@ -450,14 +736,14 @@ class Storage {
      */
     public function toggle_task( int $household_id, int $task_id, int $actor_id = 0 ): bool {
         $task = get_post( $task_id );
-        if ( ! $task || 'family_task' !== $task->post_type || (int) get_post_meta( $task_id, self::META_HOUSEHOLD_ID, true ) !== $household_id ) {
+        if ( ! $task || 'household_task' !== $task->post_type || (int) get_post_meta( $task_id, self::META_HOUSEHOLD_ID, true ) !== $household_id ) {
             return false;
         }
 
-        $is_done = (int) get_post_meta( $task_id, '_family_manager_is_done', true ) ? 0 : 1;
-        update_post_meta( $task_id, '_family_manager_is_done', $is_done );
-        update_post_meta( $task_id, '_family_manager_completed_at', $is_done ? current_time( 'mysql' ) : '' );
-        update_post_meta( $task_id, '_family_manager_completed_by', $is_done ? $actor_id : 0 );
+        $is_done = (int) get_post_meta( $task_id, '_households_is_done', true ) ? 0 : 1;
+        update_post_meta( $task_id, '_households_is_done', $is_done );
+        update_post_meta( $task_id, '_households_completed_at', $is_done ? current_time( 'mysql' ) : '' );
+        update_post_meta( $task_id, '_households_completed_by', $is_done ? $actor_id : 0 );
 
         $member_id = $this->get_assigned_member_id( $task_id );
         $points = (int) get_post_meta( $task_id, self::META_POINTS, true );
@@ -471,7 +757,7 @@ class Storage {
     /* ---------------------------------------------------------------- Rewards */
 
     public function get_rewards( int $household_id ): array {
-        return array_map( [ $this, 'format_reward' ], $this->get_related_posts( $household_id, 'family_reward' ) );
+        return array_map( [ $this, 'format_reward' ], $this->get_related_posts( $household_id, 'household_reward' ) );
     }
 
     public function add_reward( int $household_id, string $title, int $member_id = 0, int $points = 0 ): int {
@@ -481,7 +767,7 @@ class Storage {
             'post_parent' => $household_id,
             'post_status' => 'private',
             'post_title'  => $title,
-            'post_type'   => 'family_reward',
+            'post_type'   => 'household_reward',
         ], true );
 
         if ( is_wp_error( $reward_id ) ) {
@@ -490,7 +776,7 @@ class Storage {
 
         update_post_meta( $reward_id, self::META_HOUSEHOLD_ID, $household_id );
         update_post_meta( $reward_id, self::META_POINTS, $points );
-        update_post_meta( $reward_id, '_family_manager_redeemed_at', '' );
+        update_post_meta( $reward_id, '_households_redeemed_at', '' );
         $this->assign_member( $reward_id, $member_id );
 
         return (int) $reward_id;
@@ -514,7 +800,7 @@ class Storage {
 
     private function format_household( int $household_id ): array {
         $household = $household_id ? get_post( $household_id ) : null;
-        if ( ! $household || 'family_household' !== $household->post_type ) {
+        if ( ! $household || 'household' !== $household->post_type ) {
             return [];
         }
         return [
@@ -552,10 +838,10 @@ class Storage {
             'member_id'    => $member_id,
             'member_name'  => $member ? $member->display_name : '',
             'title'        => get_post_field( 'post_title', $task_id ),
-            'task_type'    => get_post_meta( $task_id, '_family_manager_task_type', true ) ?: 'task',
+            'task_type'    => get_post_meta( $task_id, '_households_task_type', true ) ?: 'task',
             'points'       => (string) (int) get_post_meta( $task_id, self::META_POINTS, true ),
-            'due_date'     => get_post_meta( $task_id, '_family_manager_due_date', true ),
-            'is_done'      => (string) (int) get_post_meta( $task_id, '_family_manager_is_done', true ),
+            'due_date'     => get_post_meta( $task_id, '_households_due_date', true ),
+            'is_done'      => (string) (int) get_post_meta( $task_id, '_households_is_done', true ),
         ];
     }
 
@@ -569,7 +855,7 @@ class Storage {
             'member_name'  => $member ? $member->display_name : '',
             'title'        => get_post_field( 'post_title', $reward_id ),
             'points'       => (string) (int) get_post_meta( $reward_id, self::META_POINTS, true ),
-            'redeemed_at'  => get_post_meta( $reward_id, '_family_manager_redeemed_at', true ),
+            'redeemed_at'  => get_post_meta( $reward_id, '_households_redeemed_at', true ),
         ];
     }
 
