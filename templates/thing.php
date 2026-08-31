@@ -31,15 +31,6 @@ require __DIR__ . '/_head.php';
         <?php endif; ?>
 
         <h1><?php echo esc_html( $hh_thing['title'] ); ?></h1>
-        <p class="subtitle">
-            <?php
-            printf(
-                /* translators: %s: the name of a household. */
-                esc_html__( 'Kept at %s.', 'households' ),
-                '<a href="' . esc_url( View::home_url( $hh_thing['home_id'] ) ) . '">' . esc_html( $hh_thing['home_name'] ) . '</a>'
-            );
-            ?>
-        </p>
         <?php View::notice(); ?>
 
         <section>
@@ -53,7 +44,6 @@ require __DIR__ . '/_head.php';
                         <input type="text" name="detail" value="<?php echo esc_attr( $hh_thing['detail'] ); ?>">
                     </label>
                     <label class="wide"><?php echo esc_html__( 'Note', 'households' ); ?>
-                        <small><?php echo esc_html__( 'Anything worth remembering about it. What it said before is kept.', 'households' ); ?></small>
                         <textarea name="note"><?php echo esc_textarea( $hh_thing['note'] ); ?></textarea>
                     </label>
                     <button class="primary" type="submit"><?php echo esc_html__( 'Save', 'households' ); ?></button>
@@ -104,25 +94,30 @@ require __DIR__ . '/_head.php';
             </section>
         <?php endif; ?>
 
-        <?php if ( $hh_writing && count( $hh_homes ) > 1 ) : ?>
-            <section>
-                <h2><?php echo esc_html__( 'Move it', 'households' ); ?></h2>
+        <section>
+            <h2><?php echo esc_html__( 'Location', 'households' ); ?></h2>
+            <div class="row">
+                <div class="grow">
+                    <a href="<?php echo esc_url( View::home_url( $hh_thing['home_id'] ) ); ?>"><?php echo esc_html( $hh_thing['home_name'] ); ?></a>
+                </div>
                 <?php // The thing names the household it is leaving, not the page, so this reads the same wherever it is asked from. ?>
-                <form method="post" class="actions">
-                    <?php View::fields( 'move_note', [ 'kind' => 'item', 'note_id' => $hh_thing['id'], 'home_id' => $hh_thing['home_id'] ] ); ?>
-                    <?php foreach ( $hh_homes as $hh_other ) : ?>
-                        <?php if ( $hh_other['id'] !== $hh_thing['home_id'] ) : ?>
-                            <button type="submit" class="quiet" name="target_home_id" value="<?php echo (int) $hh_other['id']; ?>">
-                                <?php
-                                /* translators: %s: the name of a household. */
-                                echo esc_html( sprintf( __( 'Move to %s', 'households' ), $hh_other['name'] ) );
-                                ?>
-                            </button>
-                        <?php endif; ?>
-                    <?php endforeach; ?>
-                </form>
-            </section>
-        <?php endif; ?>
+                <?php if ( $hh_writing && count( $hh_homes ) > 1 ) : ?>
+                    <form method="post" class="actions">
+                        <?php View::fields( 'move_note', [ 'kind' => 'item', 'note_id' => $hh_thing['id'], 'home_id' => $hh_thing['home_id'] ] ); ?>
+                        <?php foreach ( $hh_homes as $hh_other ) : ?>
+                            <?php if ( $hh_other['id'] !== $hh_thing['home_id'] ) : ?>
+                                <button type="submit" class="quiet" name="target_home_id" value="<?php echo (int) $hh_other['id']; ?>">
+                                    <?php
+                                    /* translators: %s: the name of a household. */
+                                    echo esc_html( sprintf( __( 'Move to %s', 'households' ), $hh_other['name'] ) );
+                                    ?>
+                                </button>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    </form>
+                <?php endif; ?>
+            </div>
+        </section>
 
         <?php if ( $hh_writing ) : ?>
             <section>
