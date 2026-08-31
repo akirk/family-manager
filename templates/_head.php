@@ -102,8 +102,8 @@ $hh_title = isset( $hh_title ) && '' !== trim( $hh_title ) ? $hh_title : __( 'Ho
         details.add > form { margin-top: 10px; }
         /* Sitting in a section's own line it keeps to the right, and opening it
            takes the whole width of that line rather than a corner of it. */
-        .row.heading details.add { margin-top: 0; }
-        .row.heading details.add[open] { flex: 1 1 100%; }
+        .row.heading details.add, .actions details.add { margin-top: 0; }
+        .row.heading details.add[open], .actions details.add[open] { flex: 1 1 100%; }
         /* Beside other controls it is the whole group that gives up the line. */
         .row.heading .actions:has(details.add[open]) { flex: 1 1 100%; }
         ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
