@@ -45,6 +45,20 @@ $hh_sifted = Storage::sift_tasks( $hh_ours, $hh_earlier );
 $hh_tasks = $hh_sifted['tasks'];
 $hh_quiet = $hh_sifted['quiet'];
 $hh_can_add = ! empty( $hh_here['viewer']['can_organise'] );
+
+// The shelf you can actually reach today, so a thing that lives here and has
+// gone somewhere else is not on it: this list is read to find something, and a
+// thing that is not in the house is not there to be found. The household's own
+// page still keeps it, because that list is what the house holds rather than
+// what is within arm's reach.
+$hh_shelf = [];
+foreach ( isset( $hh_here['items'] ) ? $hh_here['items'] : [] as $hh_thing ) {
+    $hh_thing_at = ! empty( $hh_thing['at'] ) ? $hh_thing['at'] : [];
+    if ( ! empty( $hh_thing_at['home_id'] ) && $hh_thing_at['home_id'] !== $hh_here['home']['id'] ) {
+        continue;
+    }
+    $hh_shelf[] = $hh_thing;
+}
 $hh_open = add_query_arg( 'add', 1, $hh_url );
 $hh_close = remove_query_arg( 'add', $hh_url );
 
@@ -188,15 +202,13 @@ require __DIR__ . '/_head.php';
                             <li class="empty"><?php echo esc_html__( 'Nothing says where you are today, so nothing can be said about what is within reach.', 'households' ); ?></li>
                         <?php elseif ( ! $hh_here['items'] ) : ?>
                             <li class="empty"><?php echo esc_html__( 'Nothing listed here yet.', 'households' ); ?></li>
+                        <?php elseif ( ! $hh_shelf ) : ?>
+                            <?php // Kept here, all of it somewhere else: the list is empty for a reason worth saying, since the household's own page will show them. ?>
+                            <li class="empty"><?php echo esc_html__( 'Everything kept here is somewhere else just now.', 'households' ); ?></li>
                         <?php endif; ?>
-                        <?php foreach ( isset( $hh_here['items'] ) ? $hh_here['items'] : [] as $hh_thing ) : ?>
+                        <?php foreach ( $hh_shelf as $hh_thing ) : ?>
                             <?php
-                            // The shelf you can actually reach, so a thing that
-                            // lives here but has gone somewhere else says so:
-                            // the drawer it lives in is no help today.
-                            $hh_thing_at = ! empty( $hh_thing['at'] ) ? $hh_thing['at'] : [];
-                            $hh_thing_away = ! empty( $hh_thing_at['home_id'] ) && $hh_thing_at['home_id'] !== $hh_here['home']['id'];
-                            // And a shelf you are about to leave is one to
+                            // A shelf you are about to leave is one to
                             // take things off: what is still to go in the bag
                             // is worth saying here, and so is what is already
                             // in it, because it is still on this shelf.
@@ -208,16 +220,6 @@ require __DIR__ . '/_head.php';
                                     <strong><a href="<?php echo esc_url( View::thing_url( $hh_thing['id'] ) ); ?>"><?php echo esc_html( $hh_thing['title'] ); ?></a></strong>
                                     <?php if ( $hh_thing['detail'] ) : ?>
                                         <div class="meta"><?php echo esc_html( $hh_thing['detail'] ); ?></div>
-                                    <?php endif; ?>
-                                    <?php if ( $hh_thing_away && Access::can_reach( $hh_user, $hh_thing_at['home_id'] ) ) : ?>
-                                        <div class="meta">
-                                            <?php
-                                            /* translators: %s: the name of a household. */
-                                            echo esc_html( sprintf( __( 'It is at %s just now.', 'households' ), $hh_thing_at['name'] ) );
-                                            ?>
-                                        </div>
-                                    <?php elseif ( $hh_thing_away ) : ?>
-                                        <div class="meta"><?php echo esc_html__( 'It is not at any of your households just now.', 'households' ); ?></div>
                                     <?php endif; ?>
                                 </div>
                                 <?php // Where it is to go is a house and a tick, on the line the thing is on: a shelf being read before leaving it wants the answer, not a sentence about the answer. The words are still there for anyone the arrow does not reach. ?>
