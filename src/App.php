@@ -474,7 +474,11 @@ class App extends BaseApp {
                 if ( $target && ! $this->put_person_at( $person_id, $target ) ) {
                     return $this->refuse();
                 }
-                Whereabouts::set_override( $person_id, $post( 'date' ), $target );
+                // One day, or that day and the ones after it: the board says
+                // how many when it is being tapped to plan a stay rather than
+                // swap a day. Either way it is days that are written down, so
+                // the pattern is left alone.
+                Whereabouts::set_override_run( $person_id, $post( 'date' ), $post( 'onwards', 'int' ) ?: 1, $target );
                 Whereabouts::prune_overrides( $person_id );
             }
             return $this->done();

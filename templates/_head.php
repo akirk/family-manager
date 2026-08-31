@@ -49,6 +49,24 @@ $hh_title = isset( $hh_title ) && '' !== trim( $hh_title ) ? $hh_title : __( 'Ho
         h1 { margin: 0; font-size: clamp(1.6rem, 4.5vw, 2.6rem); line-height: 1.15; }
         .subtitle { margin: 6px 0 18px; color: var(--hh-muted); }
         .status { color: var(--hh-muted); font-size: 0.92rem; min-height: 22px; }
+        /* A section waiting on the server it just posted to. */
+        [aria-busy="true"] { opacity: 0.55; transition: opacity 120ms ease-in; }
+        /* The whereabouts board: the days scroll, the names they belong to stay
+           beside them, so a fortnight is read across without losing whose it is.
+           Sticky cells and collapsed borders disagree in some browsers, so the
+           borders are the cells' own. */
+        .hh-board { display: flex; align-items: stretch; gap: 6px; }
+        .hh-board .hh-scroller { flex: 1 1 auto; min-width: 0; }
+        .hh-page { flex: 0 0 auto; display: flex; align-items: center; padding: 0 10px; border: 1px solid var(--hh-line); border-radius: 6px; color: var(--hh-accent-strong); font-weight: 700; text-decoration: none; }
+        .hh-page.off { color: color-mix(in srgb, var(--hh-muted) 40%, transparent); }
+        /* On a phone the arrows are taking width the fortnight wants. */
+        @media (max-width: 560px) { .hh-board { gap: 3px; } .hh-page { padding: 0 4px; } }
+        .hh-scroller { overflow-x: auto; overscroll-behavior-x: contain; }
+        .hh-scroller:focus-visible { outline: 2px solid var(--hh-accent); outline-offset: 2px; }
+        .hh-scroller table { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+        .hh-scroller th.hh-who { position: sticky; left: 0; text-align: left; background: var(--hh-surface); border-right: 1px solid var(--hh-line); }
+        .hh-scroller thead th { border-bottom: 1px solid var(--hh-line); }
+        .hh-scroller td { border-right: 1px solid var(--hh-line); border-bottom: 1px solid var(--hh-line); }
         .status[data-error] { color: var(--hh-warm); }
         section { background: var(--hh-surface); border: 1px solid var(--hh-line); border-radius: 8px; padding: 16px; margin: 0 0 16px; }
         section > h2 { margin: 0 0 10px; font-size: 1.05rem; }

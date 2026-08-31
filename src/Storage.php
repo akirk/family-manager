@@ -858,9 +858,10 @@ class Storage {
 
     /**
      * Where a person is today, as far as this app can honestly say: what they
-     * said, else what their rotation works out, else the single home they
-     * belong to. Someone who belongs to several and rotates between none is
-     * not tracked, and saying where they are would be a guess dressed up as an
+     * said for today, else what their rotation works out, else the last thing
+     * they said, else the single home they belong to. Someone who belongs to
+     * several, rotates between none and has never said where they are is not
+     * tracked, and saying where they are would be a guess dressed up as an
      * answer — so the app asks them instead.
      *
      * @return array{home_id:int,name:string,known:bool}
@@ -939,11 +940,17 @@ class Storage {
             $cursor = $cursor->modify( '+1 day' );
         }
 
+        // Each person is walked from the day before the window, so a move onto
+        // its first day is a handover like any other. Without it, paging
+        // forward would hide exactly the arrival that made you page.
+        $lead = ( new \DateTimeImmutable( $start, new \DateTimeZone( 'UTC' ) ) )->modify( '-1 day' )->format( 'Y-m-d' );
+
         $people = [];
+        $walks = [];
         foreach ( $this->get_people( $home_id ) as $person ) {
             $rotation = Whereabouts::get_rotation( $person['id'] );
             $days_out = [];
-            foreach ( Whereabouts::days_for_person( $person['id'], $start, $days ) as $day ) {
+            foreach ( Whereabouts::days_for_person( $person['id'], $lead, $days + 1 ) as $day ) {
                 $home = $this->get_home( $day['home_id'] );
                 $days_out[] = [
                     'date'        => $day['date'],
@@ -951,8 +958,11 @@ class Storage {
                     'home_name'   => $home['name'] ?? '',
                     'is_here'     => $day['home_id'] === $home_id,
                     'is_override' => $day['is_override'],
+                    'is_carried'  => $day['is_carried'],
                 ];
             }
+            $walks[] = [ 'name' => $person['name'], 'days' => $days_out ];
+            $days_out = array_slice( $days_out, 1 );
             $people[] = [
                 'id'       => $person['id'],
                 'name'     => $person['name'],
@@ -970,7 +980,7 @@ class Storage {
             'unknown'   => $this->whereabouts_unknown( $home_id ),
             'dates'     => $dates,
             'people'    => $people,
-            'handovers' => $this->collect_handovers( $people, $home_id ),
+            'handovers' => $this->collect_handovers( $walks, $home_id ),
             'patterns'  => $this->format_patterns(),
             'start'     => $start,
             'days'      => $days,
