@@ -117,7 +117,7 @@ require __DIR__ . '/_head.php';
                                 <?php // Everybody's by default, because a household's list is not a private one. The pill says the list it would give you, not the one you are reading. ?>
                                 <a class="pill" data-hh-live
                                     href="<?php echo esc_url( $hh_mine ? remove_query_arg( 'mine', $hh_url ) : add_query_arg( 'mine', 1, $hh_url ) ); ?>">
-                                    <?php echo $hh_mine ? esc_html__( 'everyone', 'households' ) : esc_html__( 'just me', 'households' ); ?>
+                                    <?php echo $hh_mine ? esc_html__( "everyone's", 'households' ) : esc_html__( 'just mine', 'households' ); ?>
                                 </a>
                                 <?php // A filter over a list you are reading, so it waits for there to be one: an empty list says where the rest went in words instead. ?>
                                 <?php if ( ( $hh_tasks && $hh_quiet ) || $hh_earlier ) : ?>
