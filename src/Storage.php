@@ -588,6 +588,30 @@ class Storage {
     }
 
     /**
+     * A list as it is read: what is open, what was ticked off within the week,
+     * and — asked for — everything ticked off before that too. What was left
+     * out is counted, because that count is what offers to show it.
+     *
+     * @param array[] $tasks as `get_tasks` says them.
+     * @return array{tasks: array[], quiet: int}
+     */
+    public static function sift_tasks( array $tasks, bool $earlier = false ): array {
+        $cutoff = self::done_cutoff();
+        $kept = [];
+        $quiet = 0;
+        foreach ( $tasks as $task ) {
+            if ( $task['is_done'] && $task['done_at'] < $cutoff ) {
+                ++$quiet;
+                if ( ! $earlier ) {
+                    continue;
+                }
+            }
+            $kept[] = $task;
+        }
+        return [ 'tasks' => $kept, 'quiet' => $quiet ];
+    }
+
+    /**
      * A task belongs to a home, and either to one person in it or to the house
      * as a whole. The person is the post's parent, so "everything assigned to
      * her" is one indexed lookup rather than a search.
@@ -613,6 +637,33 @@ class Storage {
         update_post_meta( $task_id, self::META_TASK_TYPE, in_array( $task_type, [ 'task', 'appointment' ], true ) ? $task_type : 'task' );
         update_post_meta( $task_id, self::META_DUE_DATE, $this->normalize_date( $due_date ) );
         return $task_id;
+    }
+
+    /**
+     * The same four answers again, about a task already written down. Anything
+     * left blank is blank on purpose: the form says all of it every time, so a
+     * date taken off is a date taken off rather than a field not mentioned.
+     */
+    public function edit_task( int $home_id, int $task_id, string $title, int $person_id = 0, string $task_type = 'task', string $due_date = '' ): bool {
+        $post = get_post( $task_id );
+        if ( ! $post || self::TASK !== $post->post_type || ! in_array( $home_id, $this->home_ids_of_post( $task_id ), true ) ) {
+            return false;
+        }
+        $title = sanitize_text_field( $title );
+        if ( '' === trim( $title ) ) {
+            return false;
+        }
+        if ( $person_id && ! Access::is_member( $person_id, $home_id ) ) {
+            $person_id = 0;
+        }
+        wp_update_post( [
+            'ID'          => $task_id,
+            'post_parent' => $person_id,
+            'post_title'  => $title,
+        ] );
+        update_post_meta( $task_id, self::META_TASK_TYPE, in_array( $task_type, [ 'task', 'appointment' ], true ) ? $task_type : 'task' );
+        update_post_meta( $task_id, self::META_DUE_DATE, $this->normalize_date( $due_date ) );
+        return true;
     }
 
     /** @return array[] open first, then by due date. */

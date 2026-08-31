@@ -596,6 +596,22 @@ class App extends BaseApp {
                 $this->storage->toggle_task( $home_id, $task_id );
                 break;
 
+            case 'edit_task':
+                // Writing a task is the same permission as writing it down in
+                // the first place, and about the same four answers.
+                if ( ! $can_organise ) {
+                    return $this->refuse();
+                }
+                $this->storage->edit_task(
+                    $home_id,
+                    $post( 'task_id', 'int' ),
+                    $post( 'title' ),
+                    $post( 'person_id', 'int' ),
+                    $post( 'task_type', 'key' ) ?: 'task',
+                    $post( 'due_date' )
+                );
+                break;
+
             case 'remove_task':
                 if ( ! $can_organise ) {
                     return $this->refuse();
