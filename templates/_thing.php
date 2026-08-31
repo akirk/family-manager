@@ -5,12 +5,15 @@
  * where it is to get to if it is on its way anywhere.
  *
  * Expects $hh_thing; $hh_homes, the households of the viewer's; and
- * $hh_thing_home — the household whose list this is, or 0 when the list is of
- * everything and no heading has said. Under a household the line says where in
- * that house it lives and nothing about the other houses that have a place for
- * it, because beside a thing that is in one place at a time that reads as it
- * being in several. Across households, where no heading has said anything,
- * each house of yours that has a place for it says so with its own line. $hh_thing_writing says whether this page offers anything to be said at
+ * $hh_thing_home — the household the heading has said the thing is at, or 0
+ * when the list is of everything and no heading has said. Under a household
+ * the line says where in that house it lives and nothing about the other
+ * houses that have a place for it, because beside a thing that is in one place
+ * at a time that reads as it being in several — unless this is not one of
+ * those houses at all, and the thing is only here, in which case where it
+ * belongs is the one thing worth saying. Across households, where no heading
+ * has said anything, each house of yours that has a place for it says so with
+ * its own line. $hh_thing_writing says whether this page offers anything to be said at
  * all — a household read as somebody else is being read rather than organised,
  * and a list on the overview is a shelf being looked at. $hh_thing_going_said
  * is for a heading that is itself a trip and has named where it is going.
@@ -28,11 +31,13 @@ namespace Households;
 // nothing has been said yet, so each one says its own name and its own answer.
 // A household nobody in the room belongs to is never named.
 $hh_thing_where = '';
+$hh_thing_keeps_here = false;
 $hh_thing_also = [];
 foreach ( $hh_thing['homes'] as $hh_thing_one ) {
     if ( $hh_thing_one['id'] === $hh_thing_home ) {
+        $hh_thing_keeps_here = true;
         $hh_thing_where = $hh_thing_one['where'];
-    } elseif ( ! $hh_thing_home && Access::can_reach( View::user_id(), $hh_thing_one['id'] ) ) {
+    } elseif ( Access::can_reach( View::user_id(), $hh_thing_one['id'] ) ) {
         $hh_thing_also[] = $hh_thing_one;
     }
 }
@@ -105,10 +110,25 @@ $hh_thing_tick = $hh_thing_writing
         <?php else : ?>
             <strong><a href="<?php echo esc_url( View::thing_url( $hh_thing['id'] ) ); ?>"><?php echo esc_html( $hh_thing['title'] ); ?></a></strong>
         <?php endif; ?>
-        <?php if ( $hh_thing_home ) : ?>
-            <?php // What this house says about where it lives, and nothing about the other houses that have a place for it: under a household's heading that reads as the thing being in two places at once, which is what the line about where it is is for. ?>
+        <?php if ( $hh_thing_home && $hh_thing_keeps_here ) : ?>
+            <?php // What this house says about where it lives, and nothing about the other houses that have a place for it: the thing is here, and naming them under a heading would read as it being in two places at once. ?>
             <?php if ( $hh_thing_where ) : ?>
                 <div class="meta"><?php echo esc_html( $hh_thing_where ); ?></div>
+            <?php endif; ?>
+        <?php elseif ( $hh_thing_home ) : ?>
+            <?php // Here, but this is not one of the houses with a place for it: brought along, borrowed, left behind. Where it belongs is the one thing worth saying about it here. ?>
+            <?php if ( $hh_thing_also ) : ?>
+                <div class="meta">
+                    <?php
+                    echo esc_html( sprintf(
+                        /* translators: %s: a list of household names. */
+                        __( 'Kept at %s.', 'households' ),
+                        implode( ', ', wp_list_pluck( $hh_thing_also, 'name' ) )
+                    ) );
+                    ?>
+                </div>
+            <?php else : ?>
+                <div class="meta"><?php echo esc_html__( 'Kept somewhere that is not yours.', 'households' ); ?></div>
             <?php endif; ?>
         <?php else : ?>
             <?php foreach ( $hh_thing_also as $hh_thing_one ) : ?>
