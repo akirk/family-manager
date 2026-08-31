@@ -59,19 +59,42 @@ require __DIR__ . '/_head.php';
 
         <section>
             <h2><?php echo esc_html__( 'What travels with them', 'households' ); ?></h2>
-            <p class="meta"><?php echo esc_html__( 'Sizes, allergies, medication, whatever the next person needs to know. Every household they belong to reads this same page, and every edit is kept, so a size written down with a date still says something in a year.', 'households' ); ?></p>
-            <form method="post" style="display:grid;gap:10px">
+            <p class="meta"><?php echo esc_html__( 'Sizes, allergies, medication, whatever the next person needs to know. Every household they belong to reads this same page, so it is written once and true in all of them.', 'households' ); ?></p>
+            <form method="post" class="grid">
                 <?php View::fields( 'save_person', [ 'person_id' => $hh_person['id'] ] ); ?>
+                <label><?php echo esc_html__( 'Name', 'households' ); ?>
+                    <input type="text" name="name" value="<?php echo esc_attr( $hh_person['name'] ); ?>" required>
+                </label>
                 <label><?php echo esc_html__( 'Born', 'households' ); ?>
                     <input type="date" name="birthdate" value="<?php echo esc_attr( $hh_person['birthdate'] ); ?>">
                 </label>
-                <label><?php echo esc_html__( 'About', 'households' ); ?>
-                    <small><?php echo esc_html__( 'Prose, not fields. Date what changes: “shoe size 32 — March 2026”.', 'households' ); ?></small>
+                <?php
+                // A size is a field because the answer is two characters long
+                // and is wanted while standing in a shop. What keeps it honest
+                // is the day beside it: nobody types that, it is stamped when
+                // the value changes, so an old measurement says that it is old.
+                foreach ( Storage::size_fields() as $hh_size_key => $hh_size_label ) :
+                    $hh_size = $hh_person['sizes'][ $hh_size_key ];
+                    ?>
+                    <label><?php echo esc_html( $hh_size_label ); ?>
+                        <?php if ( $hh_size['noted'] ) : ?>
+                            <small><?php
+                                /* translators: %s: the date a size was last written down. */
+                                echo esc_html( sprintf( __( 'Written down %s', 'households' ), mysql2date( 'j M Y', $hh_size['noted'] ) ) );
+                            ?></small>
+                        <?php else : ?>
+                            <small><?php echo esc_html__( 'Not written down yet', 'households' ); ?></small>
+                        <?php endif; ?>
+                        <input type="text" name="size_<?php echo esc_attr( $hh_size_key ); ?>" value="<?php echo esc_attr( $hh_size['value'] ); ?>">
+                    </label>
+                <?php endforeach; ?>
+                <label class="wide"><?php echo esc_html__( 'About', 'households' ); ?>
+                    <small><?php echo esc_html__( 'Everything the fields above do not ask: allergies, medication, what somebody minding them should know.', 'households' ); ?></small>
                     <textarea name="about"><?php echo esc_textarea( $hh_person['about'] ); ?></textarea>
                 </label>
-                <div>
+                <div class="actions wide">
                     <button class="primary" type="submit"><?php echo esc_html__( 'Save', 'households' ); ?></button>
-                    <span class="meta"><?php echo esc_html__( 'The previous version is kept.', 'households' ); ?></span>
+                    <span class="meta"><?php echo esc_html__( 'The previous version of what is written here is kept.', 'households' ); ?></span>
                 </div>
             </form>
         </section>

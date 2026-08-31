@@ -12,8 +12,10 @@ namespace Households;
  * about several homes at once is the same join with more terms in it.
  *
  * A person is a post whose author is their WordPress user, or nobody at all.
- * What is true of them in prose — sizes, allergies, what the next person needs
- * to know — is the post's own content, so its history is the post's revisions.
+ * What is true of them at length — allergies, medication, what the next person
+ * needs to know — is the post's own content, so its history is the post's
+ * revisions. The handful of answers that are a value rather than a sentence,
+ * the sizes, are meta, each carrying the day it was written down.
  */
 class Storage {
     /**
@@ -38,6 +40,7 @@ class Storage {
     /** Person meta. */
     public const META_LABEL     = '_households_label';
     public const META_BIRTHDATE = '_households_birthdate';
+    public const META_SIZES     = '_households_sizes';
     public const META_LAST_HOME = '_households_last_home';
 
     /** Item meta. */
@@ -285,6 +288,7 @@ class Storage {
             'is_child'  => Access::is_child( $person_id ),
             'birthdate' => $birthdate,
             'age'       => $this->age_from_birthdate( $birthdate ),
+            'sizes'     => $this->get_sizes( $person_id ),
             'user_id'   => (int) $person->post_author,
             'homes'     => $this->get_homes_for_person( $person_id ),
         ];
@@ -296,24 +300,27 @@ class Storage {
     }
 
     /**
-     * Save what is structured about a person. Everything else they are is prose
-     * in `about`, which is the post content, so editing it leaves a revision.
+     * Save what is known about a person. The name and the prose are the post's
+     * own title and content, so editing either leaves a revision — and both go
+     * in one write, because one press of Save is one version, not two.
+     *
+     * A name is not emptied by a form that carries none: renaming somebody to
+     * nothing is not a thing anyone means to do, and the pages that save the
+     * rest of a person do not ask for it.
      */
     public function save_person( int $person_id, array $fields ): void {
         if ( ! Access::is_person( $person_id ) ) {
             return;
         }
+        $write = [];
         if ( array_key_exists( 'name', $fields ) && '' !== trim( (string) $fields['name'] ) ) {
-            $this->write_post( [
-                'ID'         => $person_id,
-                'post_title' => sanitize_text_field( (string) $fields['name'] ),
-            ] );
+            $write['post_title'] = sanitize_text_field( (string) $fields['name'] );
         }
         if ( array_key_exists( 'about', $fields ) ) {
-            $this->write_post( [
-                'ID'           => $person_id,
-                'post_content' => sanitize_textarea_field( (string) $fields['about'] ),
-            ] );
+            $write['post_content'] = sanitize_textarea_field( (string) $fields['about'] );
+        }
+        if ( $write ) {
+            $this->write_post( [ 'ID' => $person_id ] + $write );
         }
         if ( array_key_exists( 'label', $fields ) ) {
             update_post_meta( $person_id, self::META_LABEL, sanitize_text_field( (string) $fields['label'] ) );
@@ -323,6 +330,77 @@ class Storage {
         }
         if ( array_key_exists( 'birthdate', $fields ) ) {
             update_post_meta( $person_id, self::META_BIRTHDATE, $this->normalize_date( (string) $fields['birthdate'] ) );
+        }
+        if ( array_key_exists( 'sizes', $fields ) && is_array( $fields['sizes'] ) ) {
+            $this->save_sizes( $person_id, $fields['sizes'] );
+        }
+    }
+
+    /**
+     * The few things about a person that are a value rather than a sentence.
+     *
+     * These are asked for by somebody standing in a shop with a phone, and the
+     * answer is two characters long. Hunting for it down a paragraph is the
+     * wrong shape, so they are fields — but each keeps the day it was written,
+     * because a child's shoe size is only an answer if you know its age.
+     *
+     * @return array<string,string> the key, and what the form calls it.
+     */
+    public static function size_fields(): array {
+        return [
+            'clothing' => __( 'Clothing size', 'households' ),
+            'shoe'     => __( 'Shoe size', 'households' ),
+        ];
+    }
+
+    /**
+     * Every size the app knows to ask about, whether or not it has an answer.
+     *
+     * The page draws a row per field either way, so the empty ones come back
+     * too rather than leaving the template to work out what is missing.
+     *
+     * @return array<string,array> value, and the date it was written down.
+     */
+    public function get_sizes( int $person_id ): array {
+        $stored = get_post_meta( $person_id, self::META_SIZES, true );
+        $stored = is_array( $stored ) ? $stored : [];
+        $sizes = [];
+        foreach ( array_keys( self::size_fields() ) as $key ) {
+            $sizes[ $key ] = [
+                'value' => isset( $stored[ $key ]['value'] ) ? (string) $stored[ $key ]['value'] : '',
+                'noted' => isset( $stored[ $key ]['noted'] ) ? $this->normalize_date( (string) $stored[ $key ]['noted'] ) : '',
+            ];
+        }
+        return $sizes;
+    }
+
+    /**
+     * Write the sizes down, stamping the ones that changed with today.
+     *
+     * The date is not asked for. It is the day the value was written, which is
+     * the only day anybody could honestly claim, and a size that came back
+     * unchanged keeps the stamp it had — so saving this page to fix a typo
+     * elsewhere does not make a year-old measurement look like this morning's.
+     * Emptied, a size goes, stamp and all: there is no answer to date.
+     */
+    private function save_sizes( int $person_id, array $said ): void {
+        $today = current_time( 'Y-m-d' );
+        $keep = [];
+        foreach ( $this->get_sizes( $person_id ) as $key => $size ) {
+            $value = array_key_exists( $key, $said ) ? sanitize_text_field( (string) $said[ $key ] ) : $size['value'];
+            $value = trim( $value );
+            if ( '' === $value ) {
+                continue;
+            }
+            $keep[ $key ] = [
+                'value' => $value,
+                'noted' => ( $value === $size['value'] && $size['noted'] ) ? $size['noted'] : $today,
+            ];
+        }
+        if ( $keep ) {
+            update_post_meta( $person_id, self::META_SIZES, $keep );
+        } else {
+            delete_post_meta( $person_id, self::META_SIZES );
         }
     }
 
