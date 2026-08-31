@@ -190,11 +190,28 @@ require __DIR__ . '/_head.php';
                             <li class="empty"><?php echo esc_html__( 'Nothing listed here yet.', 'households' ); ?></li>
                         <?php endif; ?>
                         <?php foreach ( isset( $hh_here['items'] ) ? $hh_here['items'] : [] as $hh_thing ) : ?>
+                            <?php
+                            // The shelf you can actually reach, so a thing that
+                            // lives here but has gone somewhere else says so:
+                            // the drawer it lives in is no help today.
+                            $hh_thing_at = ! empty( $hh_thing['at'] ) ? $hh_thing['at'] : [];
+                            $hh_thing_away = ! empty( $hh_thing_at['home_id'] ) && $hh_thing_at['home_id'] !== $hh_here['home']['id'];
+                            ?>
                             <li class="row">
                                 <div class="grow">
                                     <strong><a href="<?php echo esc_url( View::thing_url( $hh_thing['id'] ) ); ?>"><?php echo esc_html( $hh_thing['title'] ); ?></a></strong>
                                     <?php if ( $hh_thing['detail'] ) : ?>
                                         <div class="meta"><?php echo esc_html( $hh_thing['detail'] ); ?></div>
+                                    <?php endif; ?>
+                                    <?php if ( $hh_thing_away && Access::can_reach( $hh_user, $hh_thing_at['home_id'] ) ) : ?>
+                                        <div class="meta">
+                                            <?php
+                                            /* translators: %s: the name of a household. */
+                                            echo esc_html( sprintf( __( 'It is at %s just now.', 'households' ), $hh_thing_at['name'] ) );
+                                            ?>
+                                        </div>
+                                    <?php elseif ( $hh_thing_away ) : ?>
+                                        <div class="meta"><?php echo esc_html__( 'It is not at any of your households just now.', 'households' ); ?></div>
                                     <?php endif; ?>
                                 </div>
                             </li>
