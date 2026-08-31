@@ -62,30 +62,16 @@ class Storage {
     }
 
     /**
-     * Start a home, with the person starting it inside it and administering it.
+     * Start a home. Whoever starts it administers it, and nothing else follows.
      *
-     * A home with nobody in it is not a home, and one nobody administers cannot
-     * be added to, so both are settled here rather than left as two more steps.
-     * Someone who already has a record joins with it — a second home does not
-     * make a second person.
+     * Setting a household up is not the same as living in it: somebody has to
+     * make the grandparents' house, or the flat a child stays in every other
+     * weekend, before anybody is put in it. So this settles the one thing a
+     * home cannot be without — someone who may add to it — and leaves who is
+     * in it to be said next, on its own page, the starter included.
      */
     public function start_home( int $user_id, string $name ): int {
-        $home_id = $this->create_home( $name, $user_id );
-        if ( ! $home_id ) {
-            return 0;
-        }
-
-        $person_id = Access::person_for_user( $user_id );
-        if ( $person_id ) {
-            Access::join( $person_id, $home_id );
-            return $home_id;
-        }
-
-        $user = get_userdata( $user_id );
-        $this->add_person( $home_id, $user ? $user->display_name : '', [
-            'email' => $user ? $user->user_email : '',
-        ] );
-        return $home_id;
+        return $this->create_home( $name, $user_id );
     }
 
     public function update_home( int $home_id, string $name ): void {
@@ -107,6 +93,15 @@ class Storage {
         ];
     }
 
+    /** @return array[] the homes this user may open, named and ordered. */
+    public function get_homes_for_user( int $user_id ): array {
+        $homes = array_filter( array_map( [ $this, 'get_home' ], Access::home_ids_for_user( $user_id ) ) );
+        usort( $homes, static function( array $a, array $b ): int {
+            return strcasecmp( $a['name'], $b['name'] );
+        } );
+        return array_values( $homes );
+    }
+
     /** @return array[] the homes this person belongs to, named and ordered. */
     public function get_homes_for_person( int $person_id ): array {
         $homes = array_filter( array_map( [ $this, 'get_home' ], Access::home_ids_for_person( $person_id ) ) );
@@ -121,9 +116,8 @@ class Storage {
      * today and what is still open there.
      */
     public function get_homes_overview( int $user_id ): array {
-        $person_id = Access::person_for_user( $user_id );
         $overview = [];
-        foreach ( $this->get_homes_for_person( $person_id ) as $home ) {
+        foreach ( $this->get_homes_for_user( $user_id ) as $home ) {
             $open = 0;
             foreach ( $this->get_tasks( $home['id'] ) as $task ) {
                 $open += $task['is_done'] ? 0 : 1;
@@ -148,18 +142,20 @@ class Storage {
      * the cross-home views somewhere to look from.
      */
     public function last_home_id( int $user_id ): int {
-        $person_id = Access::person_for_user( $user_id );
-        $homes = Access::home_ids_for_person( $person_id );
+        $homes = Access::home_ids_for_user( $user_id );
         if ( ! $homes ) {
             return 0;
         }
-        $last = (int) get_post_meta( $person_id, self::META_LAST_HOME, true );
+        // The note is kept on the person, so someone who only administers has
+        // nowhere to keep one and simply lands on the first of theirs.
+        $person_id = Access::person_for_user( $user_id );
+        $last = $person_id ? (int) get_post_meta( $person_id, self::META_LAST_HOME, true ) : 0;
         return in_array( $last, $homes, true ) ? $last : $homes[0];
     }
 
     public function remember_home( int $user_id, int $home_id ): bool {
         $person_id = Access::person_for_user( $user_id );
-        if ( ! Access::is_member( $person_id, $home_id ) ) {
+        if ( ! $person_id || ! Access::can_reach( $user_id, $home_id ) ) {
             return false;
         }
         update_post_meta( $person_id, self::META_LAST_HOME, $home_id );
@@ -169,12 +165,34 @@ class Storage {
     /* ---------------------------------------------------------------- People */
 
     /**
-     * Add a person to a home.
+     * Put the person behind an account into a home, making them a record first
+     * if they have never needed one.
      *
-     * An account is only created when there is an email to create it from.
-     * Without one the record still stands on its own — which is how a toddler
-     * whose shoe size is worth writing down, or a relative who will never log
-     * in, gets to exist here without a login nobody would use.
+     * Whoever starts a household is outside it until they say otherwise, and
+     * this is how they say it. Someone who already has a record joins with it:
+     * a second household does not make a second them.
+     */
+    public function add_self( int $user_id, int $home_id ): int {
+        $person_id = Access::person_for_user( $user_id );
+        if ( $person_id ) {
+            Access::join( $person_id, $home_id );
+            return $person_id;
+        }
+
+        $user = get_userdata( $user_id );
+        $person_id = $this->add_person( $home_id, $user ? $user->display_name : '' );
+        Access::assign_user( $person_id, $user_id );
+        return $person_id;
+    }
+
+    /**
+     * Add a person to a home: a name, and whatever else is known about them.
+     *
+     * Only the record is made here. Whether anybody signs in as them is a
+     * separate question with a separate answer — `Access::assign_user()` — and
+     * most of the time it is no. A toddler whose shoe size is worth writing
+     * down, or a relative you only keep notes about, is a person here without
+     * ever being a login.
      */
     public function add_person( int $home_id, string $name, array $args = [] ): int {
         $name = sanitize_text_field( $name );
@@ -182,54 +200,41 @@ class Storage {
             return 0;
         }
 
-        $email = isset( $args['email'] ) ? sanitize_email( (string) $args['email'] ) : '';
-        $user_id = $email ? $this->user_for_email( $email, $name, (string) ( $args['password'] ?? '' ) ) : 0;
-
-        $person_id = $user_id ? Access::person_for_user( $user_id ) : 0;
-        if ( ! $person_id ) {
-            $person_id = (int) wp_insert_post( [
-                'post_author' => $user_id,
-                'post_status' => 'private',
-                'post_title'  => $name,
-                'post_type'   => Access::PERSON,
-            ] );
-        }
+        $person_id = (int) wp_insert_post( [
+            'post_author' => 0,
+            'post_status' => 'private',
+            'post_title'  => $name,
+            'post_type'   => Access::PERSON,
+        ] );
         if ( ! $person_id ) {
             return 0;
         }
 
-        Access::flush_person_cache();
         Access::join( $person_id, $home_id );
         $this->save_person( $person_id, $args );
 
         return $person_id;
     }
 
-    /** Link an existing account by email, or make one that can only open the app. */
-    private function user_for_email( string $email, string $name, string $password ): int {
-        $existing = get_user_by( 'email', $email );
-        if ( $existing ) {
-            return (int) $existing->ID;
+    /**
+     * Accounts that could be this person's: the ones nobody else answers for.
+     *
+     * @return array[] id and a label saying who the account is, ordered by name.
+     */
+    public function assignable_users( int $person_id ): array {
+        $users = [];
+        foreach ( get_users( [ 'orderby' => 'display_name' ] ) as $user ) {
+            $taken = Access::person_for_user( (int) $user->ID );
+            if ( $taken && $taken !== $person_id ) {
+                continue;
+            }
+            $users[] = [
+                'id'    => (int) $user->ID,
+                'name'  => $user->display_name ? $user->display_name : $user->user_login,
+                'login' => $user->user_login,
+            ];
         }
-        $user_id = wp_insert_user( [
-            'display_name' => $name,
-            'first_name'   => $name,
-            'role'         => self::WP_ROLE,
-            'user_email'   => $email,
-            'user_login'   => $this->unique_login( $name ),
-            'user_pass'    => '' !== $password ? $password : wp_generate_password( 20 ),
-        ] );
-        return is_wp_error( $user_id ) ? 0 : (int) $user_id;
-    }
-
-    private function unique_login( string $name ): string {
-        $base = sanitize_user( strtolower( str_replace( ' ', '', $name ) ), true ) ?: 'member';
-        $login = $base;
-        $suffix = 2;
-        while ( username_exists( $login ) ) {
-            $login = $base . $suffix++;
-        }
-        return $login;
+        return $users;
     }
 
     /** @return array The person as the app talks about them, or an empty array. */
@@ -329,7 +334,7 @@ class Storage {
     public function get_people_overview( int $user_id ): array {
         $viewer = Access::person_for_user( $user_id );
         $people = [];
-        foreach ( Access::home_ids_for_person( $viewer ) as $home_id ) {
+        foreach ( Access::home_ids_for_user( $user_id ) as $home_id ) {
             foreach ( Access::person_ids_in_home( $home_id ) as $person_id ) {
                 if ( isset( $people[ $person_id ] ) ) {
                     continue;
@@ -338,7 +343,18 @@ class Storage {
                 if ( ! $person ) {
                     continue;
                 }
-                $person['location'] = $this->location_today( $person_id );
+                // Both come out of the same lookup: where they are today, and
+                // whether that is something said about the day rather than
+                // something a pattern worked out. The second is what decides
+                // whether there is anything to take back.
+                $at = Whereabouts::home_on( $person_id, current_time( 'Y-m-d' ) );
+                $at_home = $at['home_id'] ? $this->get_home( $at['home_id'] ) : [];
+                $person['location'] = [
+                    'home_id' => $at['home_id'],
+                    'name'    => isset( $at_home['name'] ) ? $at_home['name'] : '',
+                    'known'   => (bool) $at['home_id'],
+                ];
+                $person['said'] = $at['is_override'];
                 $person['rotates'] = (bool) Whereabouts::get_rotation( $person_id );
                 $person['is_you'] = $person_id === $viewer;
                 $people[ $person_id ] = $person;
@@ -439,9 +455,8 @@ class Storage {
      * is at. A thing is in one place at a time, so this is a list, not a join.
      */
     public function get_things_overview( int $user_id ): array {
-        $viewer = Access::person_for_user( $user_id );
         $things = [];
-        foreach ( Access::home_ids_for_person( $viewer ) as $home_id ) {
+        foreach ( Access::home_ids_for_user( $user_id ) as $home_id ) {
             $home = $this->get_home( $home_id );
             foreach ( $this->get_notes( $home_id, self::ITEM ) as $thing ) {
                 $thing['home_id'] = $home_id;
@@ -549,7 +564,7 @@ class Storage {
     public function get_dashboard( int $user_id, int $home_id, int $person_id = 0 ): array {
         $home = $this->get_home( $home_id );
         $viewer_person = Access::person_for_user( $user_id );
-        if ( ! $home || ! Access::is_member( $viewer_person, $home_id ) ) {
+        if ( ! $home || ! Access::can_reach( $user_id, $home_id ) ) {
             return [];
         }
 
@@ -573,7 +588,7 @@ class Storage {
 
         return [
             'home'       => $home,
-            'homes'      => $this->get_homes_for_person( $viewer_person ),
+            'homes'      => $this->get_homes_for_user( $user_id ),
             'people'     => $this->get_people( $home_id ),
             'admins'     => $admins,
             'subject'    => $this->get_person( $person_id ),
@@ -610,7 +625,7 @@ class Storage {
     public function get_my_day( int $user_id ): array {
         $viewer = Access::person_for_user( $user_id );
         $today = current_time( 'Y-m-d' );
-        $tasks = $this->open_tasks_for( $viewer, $today );
+        $tasks = $this->open_tasks_for( $user_id, $today );
 
         return [
             'person' => $this->get_person( $viewer ),
@@ -633,9 +648,9 @@ class Storage {
      * Every open task across the homes a person belongs to, each naming the
      * home it was written down in. Soonest first; undated last.
      */
-    private function open_tasks_for( int $person_id, string $today ): array {
+    private function open_tasks_for( int $user_id, string $today ): array {
         $tasks = [];
-        foreach ( $this->get_homes_for_person( $person_id ) as $home ) {
+        foreach ( $this->get_homes_for_user( $user_id ) as $home ) {
             foreach ( $this->get_tasks( $home['id'] ) as $task ) {
                 if ( $task['is_done'] ) {
                     continue;
@@ -698,8 +713,8 @@ class Storage {
 
         $entries = array_merge(
             $this->agenda_due( $user_id, $viewer, $today, $horizon ),
-            $this->agenda_moves( $viewer, $today, $days ),
-            $this->agenda_birthdays( $viewer, $days )
+            $this->agenda_moves( $user_id, $today, $days ),
+            $this->agenda_birthdays( $user_id, $days )
         );
 
         usort( $entries, static function( array $a, array $b ): int {
@@ -721,7 +736,7 @@ class Storage {
      */
     private function agenda_due( int $user_id, int $viewer, string $from, string $until ): array {
         $entries = [];
-        foreach ( $this->get_homes_for_person( $viewer ) as $home ) {
+        foreach ( $this->get_homes_for_user( $user_id ) as $home ) {
             $sees_everything = Access::can_organise( $user_id, $home['id'] );
             foreach ( $this->get_tasks( $home['id'] ) as $task ) {
                 if ( $task['is_done'] || '' === $task['due_date'] ) {
@@ -751,8 +766,8 @@ class Storage {
      * that arrive at or leave one of their homes, and no others. People moving
      * the same way on the same day are one move, because that is one trip.
      */
-    private function agenda_moves( int $viewer, string $today, int $days ): array {
-        $mine = Access::home_ids_for_person( $viewer );
+    private function agenda_moves( int $user_id, string $today, int $days ): array {
+        $mine = Access::home_ids_for_user( $user_id );
         $moves = [];
         $seen = [];
         foreach ( $mine as $home_id ) {
@@ -797,10 +812,10 @@ class Storage {
     }
 
     /** Birthdays inside the window, each person once however many homes they are in. */
-    private function agenda_birthdays( int $viewer, int $days ): array {
+    private function agenda_birthdays( int $user_id, int $days ): array {
         $entries = [];
         $seen = [];
-        foreach ( Access::home_ids_for_person( $viewer ) as $home_id ) {
+        foreach ( Access::home_ids_for_user( $user_id ) as $home_id ) {
             foreach ( $this->get_upcoming_birthdays( $home_id ) as $birthday ) {
                 if ( isset( $seen[ $birthday['id'] ] ) || $birthday['days_until'] > $days ) {
                     continue;

@@ -30,6 +30,31 @@ class Access {
 
     public static function init(): void {
         add_filter( 'map_meta_cap', [ self::class, 'map_meta_cap' ], 10, 4 );
+        add_filter( 'wp_insert_post_data', [ self::class, 'keep_person_author' ], 10, 2 );
+    }
+
+    /**
+     * Nobody is a valid answer to who a person is, and the post API cannot say
+     * it: `wp_insert_post()` reads an author of 0 as "whoever is logged in", so
+     * writing down a toddler would hand their record to whoever wrote it, and
+     * editing that record later would hand it to whoever edited it.
+     *
+     * So for people, an author given outright is taken at its word — 0 included
+     * — and an edit that says nothing about the author keeps the one on file.
+     *
+     * @param array $data    the row about to be written.
+     * @param array $postarr what the caller actually asked for.
+     */
+    public static function keep_person_author( array $data, array $postarr ): array {
+        if ( ! isset( $data['post_type'] ) || self::PERSON !== $data['post_type'] ) {
+            return $data;
+        }
+        if ( array_key_exists( 'post_author', $postarr ) ) {
+            $data['post_author'] = (int) $postarr['post_author'];
+        } elseif ( ! empty( $postarr['ID'] ) ) {
+            $data['post_author'] = self::user_for_person( (int) $postarr['ID'] );
+        }
+        return $data;
     }
 
     /* ---------------------------------------------------------------- People */
@@ -69,6 +94,47 @@ class Access {
         self::$person_by_user = [];
     }
 
+    /**
+     * Say which WordPress account is this person's, or none with a user ID of 0.
+     *
+     * Accounts are not made here. They are made in WordPress, by whoever runs
+     * the site, and pointed at a person afterwards — a family app has no
+     * business minting logins, and a person is a record long before anybody
+     * signs in as them. One account answers for one person: an account already
+     * spoken for is refused rather than quietly moved.
+     *
+     * Administering is held as a user ID, so an account that stops being this
+     * person stops administering the households they belong to at the same
+     * moment. Otherwise it would keep a say in a household it has no presence
+     * in.
+     */
+    public static function assign_user( int $person_id, int $user_id ): bool {
+        if ( ! self::is_person( $person_id ) ) {
+            return false;
+        }
+        if ( $user_id ) {
+            $taken = self::person_for_user( $user_id );
+            if ( ! get_userdata( $user_id ) || ( $taken && $taken !== $person_id ) ) {
+                return false;
+            }
+        }
+
+        $previous = self::user_for_person( $person_id );
+        if ( $previous === $user_id ) {
+            return true;
+        }
+        foreach ( self::home_ids_for_person( $person_id ) as $home_id ) {
+            self::set_admin( $home_id, $previous, false );
+        }
+
+        wp_update_post( [
+            'ID'          => $person_id,
+            'post_author' => $user_id,
+        ] );
+        self::flush_person_cache();
+        return true;
+    }
+
     public static function is_person( int $person_id ): bool {
         $person = get_post( $person_id );
         return (bool) $person && self::PERSON === $person->post_type;
@@ -90,9 +156,54 @@ class Access {
         return is_wp_error( $terms ) ? [] : array_map( 'intval', $terms );
     }
 
-    /** @return int[] term IDs of the homes this user belongs to. */
+    /**
+     * @return int[] term IDs of the homes this user may open: the ones they
+     *               are in, and the ones they administer without being in.
+     *
+     * Setting a household up is not the same as living in it — somebody has to
+     * make the grandparents' house before anybody is put in it — so a person
+     * record is not what a household is reached through. Administering it is
+     * enough, and a household nobody has joined yet is still yours to fill.
+     */
     public static function home_ids_for_user( int $user_id ): array {
-        return self::home_ids_for_person( self::person_for_user( $user_id ) );
+        return array_values( array_unique( array_merge(
+            self::home_ids_for_person( self::person_for_user( $user_id ) ),
+            self::administered_home_ids( $user_id )
+        ) ) );
+    }
+
+    /**
+     * @return int[] term IDs of the homes this user administers.
+     *
+     * Administrators are user IDs in term meta, which no query can ask about
+     * backwards, so this reads the terms. A site holds few households — one
+     * family's several — and this is the price of keeping the list on the
+     * household rather than scattered over the people in it.
+     */
+    public static function administered_home_ids( int $user_id ): array {
+        if ( ! $user_id ) {
+            return [];
+        }
+        $terms = get_terms( [
+            'taxonomy'   => self::TAXONOMY,
+            'hide_empty' => false,
+            'fields'     => 'ids',
+        ] );
+        if ( is_wp_error( $terms ) ) {
+            return [];
+        }
+        $homes = [];
+        foreach ( array_map( 'intval', $terms ) as $home_id ) {
+            if ( in_array( $user_id, self::admins_of( $home_id ), true ) ) {
+                $homes[] = $home_id;
+            }
+        }
+        return $homes;
+    }
+
+    /** Is this household one this user may open at all? */
+    public static function can_reach( int $user_id, int $home_id ): bool {
+        return $home_id && ( self::is_member( self::person_for_user( $user_id ), $home_id ) || self::can_manage( $user_id, $home_id ) );
     }
 
     /** @return int[] person post IDs tagged with this home, oldest first. */
@@ -162,10 +273,33 @@ class Access {
         return $user_id && in_array( $user_id, self::admins_of( $home_id ), true );
     }
 
-    /** Belongs to this home and is not a child: may add and assign things. */
+    /**
+     * May add and assign things here: anyone in the household who is not a
+     * child, and anyone who administers it, whether or not they are in it.
+     */
     public static function can_organise( int $user_id, int $home_id ): bool {
+        if ( self::can_manage( $user_id, $home_id ) ) {
+            return true;
+        }
         $person = self::person_for_user( $user_id );
         return self::is_member( $person, $home_id ) && ! self::is_child( $person );
+    }
+
+    /**
+     * May this user settle things about that person — which account is theirs,
+     * above all? True for anyone administering a home the person belongs to.
+     *
+     * It is asked of the person rather than of a home, because a person is one
+     * record across all of them: saying whose account this is is the same act
+     * whichever of their households it is said from.
+     */
+    public static function can_manage_person( int $user_id, int $person_id ): bool {
+        foreach ( self::home_ids_for_person( $person_id ) as $home_id ) {
+            if ( user_can( $user_id, 'manage_household', $home_id ) ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

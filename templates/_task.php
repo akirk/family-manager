@@ -33,7 +33,7 @@ if ( 'appointment' === $hh_task['task_type'] ) {
         <?php endif; ?>
         <a class="pill" style="text-decoration:none" href="<?php echo esc_url( View::home_url( $hh_task['home_id'] ) ); ?>">
             <?php
-            /* translators: %s: the name of a home. */
+            /* translators: %s: the name of a household. */
             echo esc_html( sprintf( __( 'at %s', 'households' ), $hh_task['home_name'] ) );
             ?>
         </a>
