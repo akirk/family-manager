@@ -1,9 +1,14 @@
 <?php
 /**
- * One thing: what it is called, and where it lives in each of the houses that
- * keep it. A thing can be in more than one household — a charger, a spare key,
- * a set of wellies at each grandparent's — and it is in a different place in
- * each, so where it lives is asked once per household rather than once.
+ * One thing: what it is called, where it lives in each of the houses that keep
+ * it, and where it has got to right now. A thing can be in more than one
+ * household — a charger, a spare key, a set of wellies at each grandparent's —
+ * and it is in a different place in each, so where it lives is asked once per
+ * household rather than once.
+ *
+ * Where it lives and where it is are two questions. The hook by the door is
+ * where it lives whether or not it is hanging there, so its line is written and
+ * read at every house that keeps it, including the ones the thing is away from.
  */
 
 namespace Households;
@@ -46,6 +51,22 @@ if ( $hh_reach ) {
         if ( ! in_array( $hh_other['id'], $hh_already, true ) && current_user_can( 'organise_household', $hh_other['id'] ) ) {
             $hh_elsewhere[] = $hh_other;
         }
+    }
+}
+
+// Where it is at this moment. Another family's house is no more named here
+// than their line is shown, so a thing that has gone somewhere you do not
+// belong is somewhere else and nothing more.
+$hh_at = $hh_reach ? $hh_thing['at'] : [];
+$hh_at_named = ! empty( $hh_at['home_id'] ) && Access::can_reach( $hh_user, $hh_at['home_id'] );
+
+// The households of yours it could be taken to: the ones that do not keep it,
+// less the one it is already at. Going back to a house that keeps it is offered
+// on that house's own line above, so it is not offered twice.
+$hh_take = [];
+foreach ( $hh_elsewhere as $hh_other ) {
+    if ( empty( $hh_at['home_id'] ) || $hh_other['id'] !== $hh_at['home_id'] ) {
+        $hh_take[] = $hh_other;
     }
 }
 
@@ -114,7 +135,18 @@ require __DIR__ . '/_head.php';
                                     ?>
                                 </div>
                             <?php endif; ?>
+                            <?php // Which of them it is at, said on the line it is about. With one house keeping it there is nothing to tell apart, and the section below has already said it. ?>
+                            <?php if ( count( $hh_thing['homes'] ) > 1 && ! empty( $hh_at['home_id'] ) && $hh_one['id'] === $hh_at['home_id'] ) : ?>
+                                <div class="meta"><?php echo esc_html__( 'It is here just now.', 'households' ); ?></div>
+                            <?php endif; ?>
                         </div>
+                        <?php // Saying it is back is saying it is at this house, which touches nothing about where it lives. ?>
+                        <?php if ( $hh_one['writing'] && ( empty( $hh_at['home_id'] ) || $hh_one['id'] !== $hh_at['home_id'] ) ) : ?>
+                            <form method="post">
+                                <?php View::fields( 'note_is_at', [ 'kind' => 'item', 'note_id' => $hh_thing['id'], 'home_id' => $hh_one['id'] ] ); ?>
+                                <button type="submit" class="quiet"><?php echo esc_html__( 'It is here now', 'households' ); ?></button>
+                            </form>
+                        <?php endif; ?>
                         <?php // The last household is not offered: a thing kept nowhere is one to delete, which is said in one line at the foot of the page. ?>
                         <?php if ( $hh_one['writing'] && count( $hh_thing['homes'] ) > 1 ) : ?>
                             <form method="post">
@@ -156,6 +188,51 @@ require __DIR__ . '/_head.php';
                     </form>
                 </details>
             <?php endif; ?>
+        </section>
+
+        <?php // Where it has got to, which is a question the houses that keep it cannot each answer for themselves: a thing is in one place at a time even when several houses have a place for it. ?>
+        <section>
+            <h2><?php echo esc_html__( 'Where it is now', 'households' ); ?></h2>
+            <div class="row">
+                <div class="grow">
+                    <?php if ( $hh_at_named && $hh_at['kept'] ) : ?>
+                        <?php
+                        printf(
+                            /* translators: %s: a link naming a household. */
+                            esc_html__( 'It is at %s.', 'households' ),
+                            '<a href="' . esc_url( View::home_url( $hh_at['home_id'] ) ) . '">' . esc_html( $hh_at['name'] ) . '</a>'
+                        );
+                        ?>
+                    <?php elseif ( $hh_at_named ) : ?>
+                        <?php
+                        printf(
+                            /* translators: %s: a link naming a household. */
+                            esc_html__( 'It has been taken to %s, which does not keep it.', 'households' ),
+                            '<a href="' . esc_url( View::home_url( $hh_at['home_id'] ) ) . '">' . esc_html( $hh_at['name'] ) . '</a>'
+                        );
+                        ?>
+                    <?php elseif ( ! empty( $hh_at['home_id'] ) ) : ?>
+                        <?php // Somewhere you do not belong: that it is there at all is as much as this page will say. ?>
+                        <span class="meta"><?php echo esc_html__( 'It is not at any of your households just now.', 'households' ); ?></span>
+                    <?php else : ?>
+                        <span class="meta"><?php echo esc_html__( 'Nobody has said which of them it is at.', 'households' ); ?></span>
+                    <?php endif; ?>
+                </div>
+                <?php // Taken to a house that does not keep it, it is lent rather than moved: where it lives stays written where it was, to be said again when it comes back. ?>
+                <?php if ( $hh_take ) : ?>
+                    <form method="post" class="actions">
+                        <?php View::fields( 'note_is_at', [ 'kind' => 'item', 'note_id' => $hh_thing['id'] ] ); ?>
+                        <?php foreach ( $hh_take as $hh_other ) : ?>
+                            <button type="submit" class="quiet" name="home_id" value="<?php echo (int) $hh_other['id']; ?>">
+                                <?php
+                                /* translators: %s: the name of a household. */
+                                echo esc_html( sprintf( __( 'Taken to %s', 'households' ), $hh_other['name'] ) );
+                                ?>
+                            </button>
+                        <?php endforeach; ?>
+                    </form>
+                <?php endif; ?>
+            </div>
         </section>
 
         <?php if ( $hh_history ) : ?>

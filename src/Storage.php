@@ -29,6 +29,7 @@ class Storage {
 
     /** Item meta. */
     public const META_WHERE = '_households_where';
+    public const META_AT    = '_households_at';
 
     /** Task meta. */
     public const META_TASK_TYPE = '_households_task_type';
@@ -544,31 +545,55 @@ class Storage {
     }
 
     /**
-     * Move a thing from one household to another: it is no longer kept at the
-     * first and is kept at the second, and the other houses it is kept at are
-     * not what was being said anything about.
+     * Where the thing is at this moment, which is not the same question as
+     * which houses keep a place for it. A thing lives on the hook by the door
+     * and is in the car; the hook is still where it lives, and the line saying
+     * so is written and read whether or not the thing is hanging on it.
      *
-     * Where it lived goes with it, because a move is one household saying what
-     * the next one is now being told — unless the household it is moving to
-     * already keeps it and has its own line, which is the better answer.
+     * Said outright, it is wherever it was last said to be. That may be a house
+     * that does not keep it, which is a thing lent rather than a thing moved:
+     * it belongs where it belonged, and goes back by being said to be there.
+     *
+     * Said nothing at all, a thing kept in one house is in it, because keeping
+     * it is the whole of what has been said about it. A thing kept in several
+     * is somewhere among them nobody has named, and that is answered as not
+     * known rather than guessed at.
+     *
+     * @param int[] $keepers the households that keep it.
+     * @return array{home_id:int,name:string,kept:bool,said:bool} home_id 0 when nobody has said.
      */
-    public function move_note( int $home_id, string $post_type, int $post_id, int $target_home_id ): bool {
-        if ( ! $this->note_belongs_to( $post_id, $post_type, $home_id ) || ! $this->get_home( $target_home_id ) || $home_id === $target_home_id ) {
+    private function at_of_note( int $post_id, array $keepers ): array {
+        $said = (int) get_post_meta( $post_id, self::META_AT, true );
+        $home = $said ? $this->get_home( $said ) : [];
+        if ( ! $home ) {
+            // A household that has since gone says nothing about where the
+            // thing is, so what is left is what keeping it says.
+            $said = 0;
+            $home = 1 === count( $keepers ) ? $this->get_home( (int) reset( $keepers ) ) : [];
+        }
+        return [
+            'home_id' => isset( $home['id'] ) ? (int) $home['id'] : 0,
+            'name'    => isset( $home['name'] ) ? (string) $home['name'] : '',
+            'kept'    => isset( $home['id'] ) && in_array( (int) $home['id'], $keepers, true ),
+            'said'    => (bool) $said,
+        ];
+    }
+
+    /**
+     * Say a thing is at a household right now. Only that: no house starts or
+     * stops keeping it, and no line about where it lives is touched, because
+     * something being somewhere else for a while is not something changing
+     * where it belongs.
+     *
+     * The household may be one that does not keep it, which is how a thing
+     * taken along is said. It goes back by being said to be back.
+     */
+    public function say_note_is_at( int $home_id, string $post_type, int $post_id ): bool {
+        $post = $post_id ? get_post( $post_id ) : null;
+        if ( ! $post || self::ITEM !== $post_type || $post_type !== $post->post_type || ! $this->get_home( $home_id ) ) {
             return false;
         }
-        $post = get_post( $post_id );
-        $said = self::ITEM === $post_type ? $this->where_at( $post, $home_id ) : '';
-        $homes = array_values( array_diff( $this->home_ids_of_post( $post_id ), [ $home_id ] ) );
-        if ( ! in_array( $target_home_id, $homes, true ) ) {
-            $homes[] = $target_home_id;
-            if ( self::ITEM === $post_type ) {
-                $this->set_where( $post_id, $target_home_id, $said );
-            }
-        }
-        wp_set_object_terms( $post_id, $homes, Access::TAXONOMY );
-        if ( self::ITEM === $post_type ) {
-            $this->forget_where( $post_id, $home_id );
-        }
+        update_post_meta( $post_id, self::META_AT, $home_id );
         return true;
     }
 
@@ -606,6 +631,12 @@ class Storage {
         }
         wp_set_object_terms( $post_id, $homes, Access::TAXONOMY );
         $this->forget_where( $post_id, $home_id );
+        // A house that has given a thing up is not a house it is on loan to,
+        // so what was said about it being there is unsaid rather than left to
+        // read as a loan.
+        if ( (int) get_post_meta( $post_id, self::META_AT, true ) === $home_id ) {
+            delete_post_meta( $post_id, self::META_AT );
+        }
         return true;
     }
 
@@ -629,8 +660,8 @@ class Storage {
     /**
      * @return array[] every note of this type in this home. A thing's detail is
      *                 what this household says about where it lives, and it
-     *                 carries the households it is kept at so a page can offer
-     *                 the ones it is not.
+     *                 carries the households it is kept at, and which one it is
+     *                 at just now, so a page can say where it has got to.
      */
     public function get_notes( int $home_id, string $post_type ): array {
         $notes = [];
@@ -640,15 +671,68 @@ class Storage {
                 continue;
             }
             $item = self::ITEM === $post_type;
+            $home_ids = $item ? $this->home_ids_of_post( $post_id ) : [ $home_id ];
             $notes[] = [
                 'id'       => (int) $post->ID,
                 'title'    => $post->post_title,
                 'detail'   => $item ? $this->where_at( $post, $home_id ) : $post->post_content,
-                'home_ids' => $item ? $this->home_ids_of_post( $post_id ) : [ $home_id ],
+                'home_ids' => $home_ids,
+                // Where a thing is at this moment, which the list says only
+                // when it is somewhere other than where the list is read.
+                'at'       => $item ? $this->at_of_note( $post_id, $home_ids ) : [],
                 'modified' => $post->post_modified,
             ];
         }
         return $notes;
+    }
+
+    /**
+     * Things said to be here just now that this house does not keep: brought
+     * along for the weekend, borrowed, left behind after a visit. They belong
+     * where they belong, and this is only where they have got to, so they are
+     * a list of their own rather than mixed in with what is kept here.
+     *
+     * @return array[] each with the thing and the households that do keep it.
+     */
+    public function things_on_loan_here( int $home_id ): array {
+        if ( ! $home_id ) {
+            return [];
+        }
+        $things = [];
+        $post_ids = array_map( 'intval', get_posts( [
+            'fields'           => 'ids',
+            'numberposts'      => -1,
+            'order'            => 'ASC',
+            'orderby'          => 'ID',
+            'post_status'      => 'private',
+            'post_type'        => self::ITEM,
+            'suppress_filters' => false,
+            'meta_query'       => [
+                [
+                    'key'   => self::META_AT,
+                    'value' => $home_id,
+                ],
+            ],
+        ] ) );
+        foreach ( $post_ids as $post_id ) {
+            $post = get_post( $post_id );
+            $keepers = $post ? $this->home_ids_of_post( $post_id ) : [];
+            // A house that keeps it is not a house it has been lent to, and a
+            // thing kept nowhere at all is nobody's to be shown.
+            if ( ! $keepers || in_array( $home_id, $keepers, true ) ) {
+                continue;
+            }
+            $things[] = [
+                'id'       => (int) $post->ID,
+                'title'    => $post->post_title,
+                'home_ids' => $keepers,
+                'homes'    => array_values( array_filter( array_map( [ $this, 'get_home' ], $keepers ) ) ),
+            ];
+        }
+        usort( $things, static function( array $a, array $b ): int {
+            return strcasecmp( $a['title'], $b['title'] );
+        } );
+        return $things;
     }
 
     /**
@@ -680,6 +764,10 @@ class Storage {
             // lives there. Named in the same order the households list is, so
             // the two pages read alike.
             'homes'     => $homes,
+            // And which household it is at just now, kept there or lent there.
+            'at'        => self::ITEM === $post_type
+                ? $this->at_of_note( (int) $post->ID, wp_list_pluck( $homes, 'id' ) )
+                : [],
         ];
     }
 
@@ -741,6 +829,7 @@ class Storage {
                     $things[ $id ] = [
                         'id'    => $id,
                         'title' => $thing['title'],
+                        'at'    => $thing['at'],
                         'homes' => [],
                     ];
                 }
@@ -966,6 +1055,7 @@ class Storage {
             'tasks'      => $tasks,
             'facts'      => $this->get_notes( $home_id, self::FACT ),
             'items'      => $this->get_notes( $home_id, self::ITEM ),
+            'on_loan'    => $this->things_on_loan_here( $home_id ),
             'here'       => $this->who_is_here( $home_id ),
             'unknown'    => $this->whereabouts_unknown( $home_id ),
             'birthdays'  => $this->get_upcoming_birthdays( $home_id ),
