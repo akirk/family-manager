@@ -762,6 +762,13 @@ class Storage {
      * Start keeping a thing at a household, or say afresh where it lives there.
      * One verb for both, because they are the same sentence: this house keeps
      * it, here.
+     *
+     * A house comes to keep it by being told where in it the thing lives, so a
+     * house told nothing is given nothing: an empty line on a form asking
+     * every house of yours the same question is a house being passed over, not
+     * a house being handed something. A house that already keeps it may of
+     * course empty its own line, which says only that nobody has written down
+     * where the thing lives there.
      */
     public function keep_note_at( int $home_id, string $post_type, int $post_id, string $where ): bool {
         $post = $post_id ? get_post( $post_id ) : null;
@@ -770,6 +777,9 @@ class Storage {
         }
         $homes = $this->home_ids_of_post( $post_id );
         if ( ! in_array( $home_id, $homes, true ) ) {
+            if ( '' === trim( $where ) ) {
+                return false;
+            }
             $homes[] = $home_id;
             wp_set_object_terms( $post_id, $homes, Access::TAXONOMY );
         }

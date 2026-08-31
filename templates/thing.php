@@ -42,14 +42,23 @@ foreach ( $hh_kept as $hh_one ) {
 // not a version of it, so it is not one here either.
 $hh_history = $hh_reach ? View::storage()->get_note_history( $hh_thing['id'], Storage::ITEM ) : [];
 
-// The households of yours that could keep it too: the ones you write in that
-// are not already on the list above.
-$hh_elsewhere = [];
+// Every household of yours, whether or not it has a place for this thing
+// already: what a house says about where it lives is the same question of all
+// of them, and one asked of a house that has never had it is how it comes to.
+// A house you do not write in is on the list to be read, and one that has
+// nothing to do with the thing and nothing you could write is not on it.
+$hh_places = [];
 if ( $hh_reach ) {
-    $hh_already = wp_list_pluck( $hh_thing['homes'], 'id' );
+    $hh_lines = [];
+    foreach ( $hh_thing['homes'] as $hh_one ) {
+        $hh_lines[ $hh_one['id'] ] = $hh_one['where'];
+    }
     foreach ( View::storage()->get_homes_for_user( $hh_user ) as $hh_other ) {
-        if ( ! in_array( $hh_other['id'], $hh_already, true ) && current_user_can( 'organise_household', $hh_other['id'] ) ) {
-            $hh_elsewhere[] = $hh_other;
+        $hh_other['keeps'] = array_key_exists( $hh_other['id'], $hh_lines );
+        $hh_other['where'] = $hh_other['keeps'] ? $hh_lines[ $hh_other['id'] ] : '';
+        $hh_other['writing'] = current_user_can( 'organise_household', $hh_other['id'] );
+        if ( $hh_other['keeps'] || $hh_other['writing'] ) {
+            $hh_places[] = $hh_other;
         }
     }
 }
@@ -60,26 +69,22 @@ if ( $hh_reach ) {
 $hh_at = $hh_reach ? $hh_thing['at'] : [];
 $hh_at_named = ! empty( $hh_at['home_id'] ) && Access::can_reach( $hh_user, $hh_at['home_id'] );
 
-// The households of yours it could be taken to: the ones that do not keep it,
-// less the one it is already at. Going back to a house that keeps it is offered
-// on that house's own line above, so it is not offered twice.
+// The households of yours it could be taken to: all of them, less the one it is
+// already at. A house that has a place for it is as much somewhere to take it
+// as one that has not — going back is the same sentence as being taken along.
 $hh_take = [];
-foreach ( $hh_elsewhere as $hh_other ) {
-    if ( empty( $hh_at['home_id'] ) || $hh_other['id'] !== $hh_at['home_id'] ) {
+foreach ( $hh_places as $hh_other ) {
+    if ( $hh_other['writing'] && ( empty( $hh_at['home_id'] ) || $hh_other['id'] !== $hh_at['home_id'] ) ) {
         $hh_take[] = $hh_other;
     }
 }
 
 // Where it is to get to, which is not where it is. Anywhere of yours it is not
 // already at can be asked for, keeper or not: taking the wellies back to the
-// house that keeps them is the same sentence as taking a charger along.
+// house that has a place for them is the same sentence as taking a charger
+// along.
 $hh_going = $hh_reach && ! empty( $hh_thing['going'] ) ? $hh_thing['going'] : [];
-$hh_going_targets = [];
-foreach ( View::storage()->get_homes_for_user( $hh_user ) as $hh_other ) {
-    if ( ( empty( $hh_at['home_id'] ) || $hh_other['id'] !== $hh_at['home_id'] ) && current_user_can( 'organise_household', $hh_other['id'] ) ) {
-        $hh_going_targets[] = $hh_other;
-    }
-}
+$hh_going_targets = $hh_take;
 
 $hh_title = $hh_reach ? $hh_thing['title'] : __( 'Thing', 'households' );
 
@@ -120,85 +125,36 @@ require __DIR__ . '/_head.php';
 
         <section>
             <h2><?php echo esc_html__( 'Where it lives', 'households' ); ?></h2>
+            <?php // One line per household of yours: its name, and what it says about where the thing lives there. Every one of them is asked the same question, and answering it in a house that has never had the thing is how that house comes to have a place for it, so there is nothing else to press. ?>
             <ul class="plain">
-                <?php foreach ( $hh_kept as $hh_one ) : ?>
+                <?php foreach ( $hh_places as $hh_one ) : ?>
                     <li class="row">
-                        <div class="grow">
-                            <strong><a href="<?php echo esc_url( View::home_url( $hh_one['id'] ) ); ?>"><?php echo esc_html( $hh_one['name'] ); ?></a></strong>
-                            <?php if ( $hh_one['writing'] ) : ?>
-                                <?php // The household the line is about is the household the form names, so it is that one's permission that is asked for. ?>
-                                <form method="post" class="row" style="margin-top:6px">
-                                    <?php View::fields( 'keep_note_at', [ 'kind' => 'item', 'note_id' => $hh_thing['id'], 'home_id' => $hh_one['id'] ] ); ?>
-                                    <input class="grow" type="text" name="where"
-                                        value="<?php echo esc_attr( $hh_one['where'] ); ?>"
-                                        aria-label="<?php
-                                        /* translators: %s: the name of a household. */
-                                        echo esc_attr( sprintf( __( 'Where it lives at %s', 'households' ), $hh_one['name'] ) );
-                                        ?>">
-                                    <button class="primary" type="submit"><?php echo esc_html__( 'Save', 'households' ); ?></button>
-                                </form>
-                            <?php else : ?>
-                                <div class="meta">
-                                    <?php
-                                    echo $hh_one['where']
-                                        ? esc_html( $hh_one['where'] )
-                                        : esc_html__( 'Nothing is written down about where it lives.', 'households' );
-                                    ?>
-                                </div>
-                            <?php endif; ?>
-                            <?php // Which of them it is at, said on the line it is about. With one house keeping it there is nothing to tell apart, and the section below has already said it. ?>
-                            <?php if ( count( $hh_thing['homes'] ) > 1 && ! empty( $hh_at['home_id'] ) && $hh_one['id'] === $hh_at['home_id'] ) : ?>
-                                <div class="meta"><?php echo esc_html__( 'It is here just now.', 'households' ); ?></div>
-                            <?php endif; ?>
-                        </div>
-                        <?php // Saying it is back is saying it is at this house, which touches nothing about where it lives. ?>
-                        <?php if ( $hh_one['writing'] && ( empty( $hh_at['home_id'] ) || $hh_one['id'] !== $hh_at['home_id'] ) ) : ?>
-                            <form method="post">
-                                <?php View::fields( 'note_is_at', [ 'kind' => 'item', 'note_id' => $hh_thing['id'], 'home_id' => $hh_one['id'] ] ); ?>
-                                <button type="submit" class="quiet"><?php echo esc_html__( 'It is here now', 'households' ); ?></button>
+                        <strong><a href="<?php echo esc_url( View::home_url( $hh_one['id'] ) ); ?>"><?php echo esc_html( $hh_one['name'] ); ?></a></strong>
+                        <?php if ( $hh_one['writing'] ) : ?>
+                            <?php // The household the line is about is the household the form names, so it is that one's permission that is asked for. ?>
+                            <form method="post" class="row grow">
+                                <?php View::fields( 'keep_note_at', [ 'kind' => 'item', 'note_id' => $hh_thing['id'], 'home_id' => $hh_one['id'] ] ); ?>
+                                <input class="grow" type="text" name="where"
+                                    value="<?php echo esc_attr( $hh_one['where'] ); ?>"
+                                    placeholder="<?php echo esc_attr__( 'Where should it be here?', 'households' ); ?>"
+                                    aria-label="<?php
+                                    /* translators: %s: the name of a household. */
+                                    echo esc_attr( sprintf( __( 'Where it lives at %s', 'households' ), $hh_one['name'] ) );
+                                    ?>">
+                                <button class="primary" type="submit"><?php echo esc_html__( 'Save', 'households' ); ?></button>
                             </form>
-                        <?php endif; ?>
-                        <?php // The last household is not offered: a thing kept nowhere is one to delete, which is said in one line at the foot of the page. ?>
-                        <?php if ( $hh_one['writing'] && count( $hh_thing['homes'] ) > 1 ) : ?>
-                            <form method="post">
-                                <?php View::fields( 'drop_note_at', [ 'kind' => 'item', 'note_id' => $hh_thing['id'], 'home_id' => $hh_one['id'] ] ); ?>
-                                <button type="submit" class="quiet"><?php echo esc_html__( 'Not kept here', 'households' ); ?></button>
-                            </form>
+                        <?php else : ?>
+                            <div class="grow meta">
+                                <?php
+                                echo $hh_one['where']
+                                    ? esc_html( $hh_one['where'] )
+                                    : esc_html__( 'Nothing is written down about where it lives.', 'households' );
+                                ?>
+                            </div>
                         <?php endif; ?>
                     </li>
                 <?php endforeach; ?>
             </ul>
-
-            <?php if ( $hh_elsewhere ) : ?>
-                <details class="add">
-                    <summary><?php echo esc_html__( '+ Kept somewhere else too', 'households' ); ?></summary>
-                    <form method="post" class="grid">
-                        <?php View::fields( 'keep_note_at', [ 'kind' => 'item', 'note_id' => $hh_thing['id'] ] ); ?>
-                        <?php // One household to add it to is not a question; the form says which it is and asks nothing. ?>
-                        <?php if ( count( $hh_elsewhere ) > 1 ) : ?>
-                            <label><?php echo esc_html__( 'At which household', 'households' ); ?>
-                                <select name="home_id">
-                                    <?php foreach ( $hh_elsewhere as $hh_other ) : ?>
-                                        <option value="<?php echo (int) $hh_other['id']; ?>"><?php echo esc_html( $hh_other['name'] ); ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </label>
-                        <?php else : ?>
-                            <input type="hidden" name="home_id" value="<?php echo (int) $hh_elsewhere[0]['id']; ?>">
-                        <?php endif; ?>
-                        <label>
-                            <?php
-                            echo 1 === count( $hh_elsewhere )
-                                /* translators: %s: the name of a household. */
-                                ? esc_html( sprintf( __( 'Where it lives at %s', 'households' ), $hh_elsewhere[0]['name'] ) )
-                                : esc_html__( 'Where it lives', 'households' );
-                            ?>
-                            <input type="text" name="where">
-                        </label>
-                        <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-                    </form>
-                </details>
-            <?php endif; ?>
         </section>
 
         <?php // Where it has got to, which is a question the houses that keep it cannot each answer for themselves: a thing is in one place at a time even when several houses have a place for it. ?>

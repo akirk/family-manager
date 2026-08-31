@@ -7,8 +7,10 @@
  * Expects $hh_thing; $hh_homes, the households of the viewer's; and
  * $hh_thing_home — the household whose list this is, or 0 when the list is of
  * everything and no heading has said. Under a household the line says where in
- * that house it lives; across them it names every household of yours that keeps
- * it. $hh_thing_writing says whether this page offers anything to be said at
+ * that house it lives and nothing about the other houses that have a place for
+ * it, because beside a thing that is in one place at a time that reads as it
+ * being in several. Across households, where no heading has said anything,
+ * each house of yours that has a place for it says so with its own line. $hh_thing_writing says whether this page offers anything to be said at
  * all — a household read as somebody else is being read rather than organised,
  * and a list on the overview is a shelf being looked at. $hh_thing_going_said
  * is for a heading that is itself a trip and has named where it is going.
@@ -30,7 +32,7 @@ $hh_thing_also = [];
 foreach ( $hh_thing['homes'] as $hh_thing_one ) {
     if ( $hh_thing_one['id'] === $hh_thing_home ) {
         $hh_thing_where = $hh_thing_one['where'];
-    } elseif ( Access::can_reach( View::user_id(), $hh_thing_one['id'] ) ) {
+    } elseif ( ! $hh_thing_home && Access::can_reach( View::user_id(), $hh_thing_one['id'] ) ) {
         $hh_thing_also[] = $hh_thing_one;
     }
 }
@@ -104,20 +106,9 @@ $hh_thing_tick = $hh_thing_writing
             <strong><a href="<?php echo esc_url( View::thing_url( $hh_thing['id'] ) ); ?>"><?php echo esc_html( $hh_thing['title'] ); ?></a></strong>
         <?php endif; ?>
         <?php if ( $hh_thing_home ) : ?>
+            <?php // What this house says about where it lives, and nothing about the other houses that have a place for it: under a household's heading that reads as the thing being in two places at once, which is what the line about where it is is for. ?>
             <?php if ( $hh_thing_where ) : ?>
                 <div class="meta"><?php echo esc_html( $hh_thing_where ); ?></div>
-            <?php endif; ?>
-            <?php if ( $hh_thing_also ) : ?>
-                <div class="actions" style="margin-top:4px">
-                    <?php foreach ( $hh_thing_also as $hh_thing_one ) : ?>
-                        <a class="pill" href="<?php echo esc_url( View::home_url( $hh_thing_one['id'] ) ); ?>">
-                            <?php
-                            /* translators: %s: the name of a household. */
-                            echo esc_html( sprintf( __( 'also kept at %s', 'households' ), $hh_thing_one['name'] ) );
-                            ?>
-                        </a>
-                    <?php endforeach; ?>
-                </div>
             <?php endif; ?>
         <?php else : ?>
             <?php foreach ( $hh_thing_also as $hh_thing_one ) : ?>
