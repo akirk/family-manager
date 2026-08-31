@@ -313,8 +313,8 @@ require __DIR__ . '/_head.php';
                 </section>
 
                 <section id="hh-agenda" data-hh-live-section>
-                    <?php // The fortnight as it happens to you: hours somebody else has claimed, days people move, and birthdays. Not a second copy of the list to the left of it — what is to be done is read in the house it is to be done in. ?>
-                    <h2><a href="<?php echo esc_url( View::base() . 'where/' ); ?>"><?php echo esc_html__( 'People', 'households' ); ?></a></h2>
+                    <?php // The fortnight as it happens to you: hours somebody else has claimed, days people move, and birthdays. Not a second copy of the list to the left of it — what is to be done is read in the house it is to be done in. The heading names what the list is rather than the page it opens, because the three things in it are not all about people. ?>
+                    <h2><a href="<?php echo esc_url( View::base() . 'where/' ); ?>"><?php echo esc_html__( 'Upcoming', 'households' ); ?></a></h2>
                     <ul class="plain">
                         <?php if ( ! $hh_day['agenda'] ) : ?>
                             <li class="empty"><?php echo esc_html__( 'Nothing booked, nobody moving, no birthdays in the next fortnight.', 'households' ); ?></li>
@@ -352,33 +352,24 @@ require __DIR__ . '/_head.php';
                                     <?php if ( $hh_meta ) : ?>
                                         <div class="meta"><?php echo esc_html( $hh_meta ); ?></div>
                                     <?php endif; ?>
-                                </div>
-                                <div class="actions">
-                                    <?php // What is waiting to go along on that trip, and the bag it is waiting in. ?>
+                                    <?php // What is waiting to go along on that trip, and the bag it is waiting in. It is under the line rather than beside it: every row of this list reads as a thing on the left and the day it falls on the right, and the day is the column you run your eye down. ?>
                                     <?php if ( 'move' === $hh_entry['kind'] && ! empty( $hh_entry['to_pack'] ) ) : ?>
-                                        <a class="pill warm" href="<?php echo esc_url( View::pack_url( $hh_entry['from_id'], $hh_entry['home_id'] ) ); ?>">
-                                            <?php
-                                            printf(
-                                                esc_html(
-                                                    /* translators: %d: how many things are waiting to be taken along. */
-                                                    _n( '%d to pack', '%d to pack', $hh_entry['to_pack'], 'households' )
-                                                ),
-                                                (int) $hh_entry['to_pack']
-                                            );
-                                            ?>
-                                        </a>
+                                        <div class="meta">
+                                            <a class="pill warm" href="<?php echo esc_url( View::pack_url( $hh_entry['from_id'], $hh_entry['home_id'] ) ); ?>">
+                                                <?php
+                                                printf(
+                                                    esc_html(
+                                                        /* translators: %d: how many things are waiting to be taken along. */
+                                                        _n( '%d to pack', '%d to pack', $hh_entry['to_pack'], 'households' )
+                                                    ),
+                                                    (int) $hh_entry['to_pack']
+                                                );
+                                                ?>
+                                            </a>
+                                        </div>
                                     <?php endif; ?>
-                                    <?php // A move names both households in its line; the pill would say it twice. ?>
-                                    <?php if ( $hh_entry['home_id'] && 'move' !== $hh_entry['kind'] ) : ?>
-                                        <a class="pill" style="text-decoration:none" href="<?php echo esc_url( View::home_url( $hh_entry['home_id'] ) ); ?>">
-                                            <?php
-                                            /* translators: %s: the name of a household. */
-                                            echo esc_html( sprintf( __( 'at %s', 'households' ), $hh_entry['home_name'] ) );
-                                            ?>
-                                        </a>
-                                    <?php endif; ?>
-                                    <span class="pill"><?php echo esc_html( $hh_entry['when'] ); ?></span>
                                 </div>
+                                <span class="pill"><?php echo esc_html( $hh_entry['when'] ); ?></span>
                             </li>
                         <?php endforeach; ?>
                     </ul>
