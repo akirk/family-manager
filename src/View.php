@@ -46,6 +46,17 @@ class View {
         return self::base() . 'thing/' . $note_id . '/';
     }
 
+    /**
+     * The packlist, or the one list on it that goes this way. A route is named
+     * by both its ends, so a line about a trip can open the bag for that trip
+     * rather than the page and a search down it. Nobody has said where the
+     * thing is and the list it is on has one end, which is the one named.
+     */
+    public static function pack_url( int $from_id = 0, int $to_id = 0 ): string {
+        $url = self::base() . 'pack/';
+        return $to_id ? $url . '#going-' . $from_id . '-' . $to_id : $url;
+    }
+
     /** A date as the app says it out loud: today, tomorrow, or "Fri 4 Sep". */
     public static function date( string $date ): string {
         return self::storage()->say_date( $date );

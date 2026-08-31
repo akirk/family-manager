@@ -316,17 +316,33 @@ require __DIR__ . '/_head.php';
                                 <?php echo esc_html( $hh_handover['from_name'] ); ?> &rarr; <?php echo esc_html( $hh_handover['to_name'] ); ?>
                             </div>
                         </div>
-                        <span class="pill">
-                            <?php
-                            if ( 'out' === $hh_handover['direction'] ) {
-                                echo esc_html__( 'leaving', 'households' );
-                            } elseif ( 'in' === $hh_handover['direction'] ) {
-                                echo esc_html__( 'arriving', 'households' );
-                            } else {
-                                echo esc_html__( 'elsewhere', 'households' );
-                            }
-                            ?>
-                        </span>
+                        <div class="actions">
+                            <?php // What is waiting to go along on that trip, and the bag it is waiting in. ?>
+                            <?php if ( ! empty( $hh_handover['to_pack'] ) ) : ?>
+                                <a class="pill warm" href="<?php echo esc_url( View::pack_url( $hh_handover['from_id'], $hh_handover['to_id'] ) ); ?>">
+                                    <?php
+                                    printf(
+                                        esc_html(
+                                            /* translators: %d: how many things are waiting to be taken along. */
+                                            _n( '%d to pack', '%d to pack', $hh_handover['to_pack'], 'households' )
+                                        ),
+                                        (int) $hh_handover['to_pack']
+                                    );
+                                    ?>
+                                </a>
+                            <?php endif; ?>
+                            <span class="pill">
+                                <?php
+                                if ( 'out' === $hh_handover['direction'] ) {
+                                    echo esc_html__( 'leaving', 'households' );
+                                } elseif ( 'in' === $hh_handover['direction'] ) {
+                                    echo esc_html__( 'arriving', 'households' );
+                                } else {
+                                    echo esc_html__( 'elsewhere', 'households' );
+                                }
+                                ?>
+                            </span>
+                        </div>
                     </li>
                 <?php endforeach; ?>
             </ul>

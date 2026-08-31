@@ -20,8 +20,13 @@ namespace Households;
  * that the server has not worked out already.
  */
 ( function () {
-    if ( ! document.getElementById( 'hh-todo' ) || ! window.fetch || ! window.DOMParser || ! window.FormData ) {
+    if ( ! document.querySelector( '[data-hh-live-section]' ) || ! window.fetch || ! window.DOMParser || ! window.FormData ) {
         return;
+    }
+
+    /** The live section a form or a link is inside, if it is inside one. */
+    function section( node ) {
+        return node ? node.closest( '[data-hh-live-section]' ) : null;
     }
 
     // Which sections come back in: the page says so on the sections themselves,
@@ -48,8 +53,16 @@ namespace Households;
         living().forEach( function ( id ) {
             var here = document.getElementById( id );
             var came = fresh.getElementById( id );
-            if ( here && came ) {
+            if ( ! here ) {
+                return;
+            }
+            // A section the server no longer renders is one the page no longer
+            // has: the last thing on a list was taken off it, and what is left
+            // is not that list with nothing in it.
+            if ( came ) {
                 here.replaceWith( came );
+            } else {
+                here.remove();
             }
         } );
         if ( was ) {
@@ -70,9 +83,10 @@ namespace Households;
         link.href = link.getAttribute( show ? 'data-hh-close' : 'data-hh-open' );
     }
 
-    function load( url, form, after ) {
-        var busy = document.getElementById( 'hh-todo' );
-        busy.setAttribute( 'aria-busy', 'true' );
+    function load( url, form, busy ) {
+        if ( busy ) {
+            busy.setAttribute( 'aria-busy', 'true' );
+        }
         fetch( url, form
             ? { method: 'POST', body: new FormData( form ), credentials: 'same-origin' }
             : { credentials: 'same-origin' } )
@@ -99,8 +113,15 @@ namespace Households;
                 if ( again ) {
                     again.focus();
                 }
-                if ( after ) {
-                    after();
+                // A row opened by a link is a row asking to be typed in. The
+                // attribute says so for a page that arrives with one already
+                // open; a section put back in was never loaded, so it is said
+                // again here.
+                if ( ! form ) {
+                    var typing = document.querySelector( '[data-hh-live-section] form[action] input[name="title"]' );
+                    if ( typing ) {
+                        typing.focus();
+                    }
                 }
             } )
             // Anything unexpected hands the page back to the browser, which has
@@ -117,49 +138,44 @@ namespace Households;
     // Listening is done once, from outside what gets exchanged, so no amount of
     // swapping can leave a form posting twice or a link doing nothing.
     document.addEventListener( 'submit', function ( event ) {
-        var form = event.target.closest( '#hh-todo form' );
-        if ( ! form ) {
+        var form = event.target.closest( 'form' );
+        var live = section( form );
+        if ( ! live ) {
             return;
         }
         event.preventDefault();
-        load( form.getAttribute( 'action' ) || window.location.href, form );
+        load( form.getAttribute( 'action' ) || window.location.href, form, live );
     } );
 
     // A box being ticked is the form it is in being posted; the button beside it
     // says the same thing to a page that never ran this.
     document.addEventListener( 'change', function ( event ) {
-        var box = event.target.closest( '#hh-todo input[data-hh-tick]' );
-        if ( ! box || ! box.form ) {
+        var box = event.target.closest( 'input[data-hh-tick]' );
+        var live = section( box );
+        if ( ! box || ! box.form || ! live ) {
             return;
         }
-        load( window.location.href, box.form );
+        load( window.location.href, box.form, live );
     } );
 
     // Whose list it is, what was done earlier, which row is open: links like any
     // other, and it is only the page around them that need not be fetched again
     // to answer them.
     document.addEventListener( 'click', function ( event ) {
-        var link = event.target.closest( '#hh-todo a[data-hh-live]' );
-        if ( ! link ) {
+        var link = event.target.closest( 'a[data-hh-live]' );
+        var live = section( link );
+        if ( ! link || ! live ) {
             return;
         }
         event.preventDefault();
         window.history.replaceState( {}, '', link.href );
-        // A row opened by a link is a row asking to be typed in. The attribute
-        // says so for a page that arrives with one already open; a section put
-        // back in was never loaded, so it is said again here.
-        load( link.href, null, function () {
-            var typing = document.querySelector( '#hh-todo form[action] input[name="title"]' );
-            if ( typing ) {
-                typing.focus();
-            }
-        } );
+        load( link.href, null, live );
     } );
 
     // Opening the form changes nothing anybody could be sent or reload into, so
     // it changes nothing about the URL either. It is a form being shown.
     document.addEventListener( 'click', function ( event ) {
-        var link = event.target.closest( '#hh-todo a[data-hh-add]' );
+        var link = event.target.closest( '[data-hh-live-section] a[data-hh-add]' );
         var form = document.getElementById( 'add' );
         if ( ! link || ! form ) {
             return;
