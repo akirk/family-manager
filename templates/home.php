@@ -37,6 +37,18 @@ $hh_url = remove_query_arg( 'problem' );
 // back to and what the way out of it points at.
 $hh_shut = remove_query_arg( [ 'add', 'edit' ], $hh_url );
 $hh_open = add_query_arg( 'add', 1, $hh_shut );
+// What is here, which is not everything the house keeps: a thing that lives
+// here and has gone somewhere else is not on the shelf to be found. Where it
+// has got to is said on its own page, and at the household it is at, which is
+// the household that can say it has come back.
+$hh_here_now = [];
+foreach ( $hh['items'] as $hh_item ) {
+    $hh_item_at = ! empty( $hh_item['at'] ) ? $hh_item['at'] : [];
+    if ( ! empty( $hh_item_at['home_id'] ) && $hh_item_at['home_id'] !== $hh['home']['id'] ) {
+        continue;
+    }
+    $hh_here_now[] = $hh_item;
+}
 $hh_sifted = Storage::sift_tasks( $hh['tasks'], $hh_earlier );
 $hh_tasks = $hh_sifted['tasks'];
 $hh_quiet = $hh_sifted['quiet'];
@@ -180,7 +192,7 @@ foreach ( $hh_tasks as $hh_task ) {
         <?php // Ticking something off the packing is a tick like any other, so the section it is in comes back from the server rather than the page going away and returning. ?>
         <section id="hh-things" data-hh-live-section>
             <div class="row heading">
-                <h2><?php echo esc_html__( 'Things kept here', 'households' ); ?></h2>
+                <h2><?php echo esc_html__( 'Things that are here', 'households' ); ?></h2>
                 <?php if ( $hh_writing ) : ?>
                     <details class="add">
                         <summary><?php echo esc_html__( '+ Add', 'households' ); ?></summary>
@@ -191,15 +203,21 @@ foreach ( $hh_tasks as $hh_task ) {
                             <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
                         </form>
                     </details>
-                <?php elseif ( ! $hh['items'] ) : ?>
-                    <span class="meta"><?php echo esc_html__( 'Nothing listed yet.', 'households' ); ?></span>
+                <?php elseif ( ! $hh_here_now ) : ?>
+                    <span class="meta">
+                        <?php
+                        echo $hh['items']
+                            ? esc_html__( 'Everything kept here is somewhere else just now.', 'households' )
+                            : esc_html__( 'Nothing listed yet.', 'households' );
+                        ?>
+                    </span>
                 <?php endif; ?>
             </div>
             <?php require __DIR__ . '/_undone.php'; ?>
             <?php // The same line the things pages print, because a thing reads the same wherever it is listed: where it lives, who else keeps it, where it has got to, and where it is to go. The heading has said which household this is. ?>
             <ul class="plain">
                 <?php $hh_homes = $hh['homes']; ?>
-                <?php foreach ( $hh['items'] as $hh_thing ) : ?>
+                <?php foreach ( $hh_here_now as $hh_thing ) : ?>
                     <?php
                     $hh_thing_home = $hh['home']['id'];
                     $hh_thing_at_said = true;
