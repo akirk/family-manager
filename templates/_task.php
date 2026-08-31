@@ -21,19 +21,25 @@ $hh_overdue = $hh_task['due_date'] && $hh_task['due_date'] < current_time( 'Y-m-
 <li class="row">
     <form method="post" class="actions grow">
         <?php View::fields( 'toggle_task', [ 'home_id' => $hh_task_home, 'task_id' => $hh_task['id'] ] ); ?>
-        <button type="submit" class="quiet"><?php echo esc_html__( 'Done', 'households' ); ?></button>
-        <span>
-            <?php echo esc_html( $hh_task['title'] ); ?>
-            <?php if ( $hh_bits ) : ?>
-                <span class="meta">· <?php echo esc_html( implode( ' · ', $hh_bits ) ); ?></span>
-            <?php endif; ?>
-        </span>
+        <?php // Ticking it off is a tick. The button behind it is what does the ticking when there is no script to notice the box. ?>
+        <label class="inline">
+            <input type="checkbox" data-hh-tick>
+            <span>
+                <?php echo esc_html( $hh_task['title'] ); ?>
+                <?php if ( $hh_bits ) : ?>
+                    <span class="meta">· <?php echo esc_html( implode( ' · ', $hh_bits ) ); ?></span>
+                <?php endif; ?>
+            </span>
+        </label>
+        <button type="submit" class="quiet" data-hh-fallback><?php echo esc_html__( 'Done', 'households' ); ?></button>
     </form>
     <div class="actions">
         <?php if ( $hh_overdue ) : ?>
             <span class="pill warm"><?php echo esc_html__( 'overdue', 'households' ); ?></span>
         <?php endif; ?>
-        <?php // Whose it is, or nobody's — and nobody's is worth saying, because it is the ones anyone may claim. ?>
-        <span class="pill"><?php echo esc_html( $hh_task['person'] ?: __( 'anyone’s', 'households' ) ); ?></span>
+        <?php // Whose it is. Nothing named is nobody's, which the empty space says as well as a word would. ?>
+        <?php if ( $hh_task['person'] ) : ?>
+            <span class="pill"><?php echo esc_html( $hh_task['person'] ); ?></span>
+        <?php endif; ?>
     </div>
 </li>

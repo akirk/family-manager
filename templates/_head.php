@@ -128,6 +128,9 @@ $hh_title = isset( $hh_title ) && '' !== trim( $hh_title ) ? $hh_title : __( 'Ho
         .actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
         .grow { flex: 1 1 240px; }
         p.status { margin: 0 0 12px; }
+        /* What a page falls back on when its script did not run. The script says
+           so on the document itself, which no section being exchanged can undo. */
+        html[data-hh-live] [data-hh-fallback] { display: none; }
         [hidden] { display: none !important; }
     </style>
 </head>

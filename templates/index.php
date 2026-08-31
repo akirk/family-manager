@@ -314,6 +314,10 @@ require __DIR__ . '/_head.php';
         return;
     }
 
+    // Said on the document, so the buttons that are only there for a page with
+    // no script go quiet — and stay quiet however often a section is exchanged.
+    document.documentElement.setAttribute( 'data-hh-live', '' );
+
     function swap( html ) {
         // The server has no idea the form is open — that is not in the URL and
         // does not belong there — so what came back has it shut, and it is put
@@ -390,6 +394,16 @@ require __DIR__ . '/_head.php';
         }
         event.preventDefault();
         load( window.location.href, form );
+    } );
+
+    // A box being ticked is the form it is in being posted; the button beside it
+    // says the same thing to a page that never ran this.
+    document.addEventListener( 'change', function ( event ) {
+        var box = event.target.closest( '#hh-todo input[data-hh-tick]' );
+        if ( ! box || ! box.form ) {
+            return;
+        }
+        load( window.location.href, box.form );
     } );
 
     // Whose list it is is a link like any other; it is only the page around it
