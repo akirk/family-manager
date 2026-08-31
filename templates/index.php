@@ -96,16 +96,21 @@ require __DIR__ . '/_head.php';
             <div>
                 <section id="hh-todo" data-hh-live-section>
                     <div class="row heading">
+                        <?php // The heading is the way on, as it is over the households: it names the house the list is of, and opens it. ?>
                         <h2>
-                            <?php
-                            echo $hh_where['known']
-                                ? esc_html( sprintf(
-                                    /* translators: %s: the name of a household. */
-                                    __( 'To do in %s', 'households' ),
-                                    $hh_where['name']
-                                ) )
-                                : esc_html__( 'To do', 'households' );
-                            ?>
+                            <?php if ( $hh_where['known'] ) : ?>
+                                <a href="<?php echo esc_url( View::home_url( $hh_where['home_id'] ) ); ?>">
+                                    <?php
+                                    echo esc_html( sprintf(
+                                        /* translators: %s: the name of a household. */
+                                        __( 'To do in %s', 'households' ),
+                                        $hh_where['name']
+                                    ) );
+                                    ?>
+                                </a>
+                            <?php else : ?>
+                                <?php echo esc_html__( 'To do', 'households' ); ?>
+                            <?php endif; ?>
                         </h2>
                         <?php if ( $hh_where['known'] ) : ?>
                             <div class="actions">
@@ -180,15 +185,19 @@ require __DIR__ . '/_head.php';
                 <section>
                     <div class="row heading">
                         <h2>
-                            <?php
-                            echo $hh_where['known']
-                                ? esc_html( sprintf(
-                                    /* translators: %s: the name of a household. */
-                                    __( 'Things kept at %s', 'households' ),
-                                    $hh_where['name']
-                                ) )
-                                : esc_html__( 'Things kept where you are', 'households' );
-                            ?>
+                            <?php if ( $hh_where['known'] ) : ?>
+                                <a href="<?php echo esc_url( View::home_url( $hh_where['home_id'] ) ); ?>">
+                                    <?php
+                                    echo esc_html( sprintf(
+                                        /* translators: %s: the name of a household. */
+                                        __( 'Things kept at %s', 'households' ),
+                                        $hh_where['name']
+                                    ) );
+                                    ?>
+                                </a>
+                            <?php else : ?>
+                                <?php echo esc_html__( 'Things kept where you are', 'households' ); ?>
+                            <?php endif; ?>
                         </h2>
                         <div class="actions">
                             <a class="pill" href="<?php echo esc_url( View::base() . 'things/' ); ?>"
