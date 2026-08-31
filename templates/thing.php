@@ -124,10 +124,18 @@ require __DIR__ . '/_head.php';
         </section>
 
         <section>
-            <h2><?php echo esc_html__( 'Where it lives', 'households' ); ?></h2>
             <?php // One line per household of yours: its name, and what it says about where the thing lives there. Every one of them is asked the same question, and it is one form and one press, because it is one answer about the thing rather than a row of separate ones. Answering for a house that has never had the thing is how that house comes to have a place for it, so there is nothing else to press. ?>
             <form method="post">
                 <?php View::fields( 'set_note_places', [ 'kind' => 'item', 'note_id' => $hh_thing['id'], 'home_id' => $hh_writing ] ); ?>
+                <?php // The press sits on the section's own line, where every other section keeps what can be done with it, rather than on a line of its own under the list. ?>
+                <div class="row heading">
+                    <h2><?php echo esc_html__( 'Where it lives', 'households' ); ?></h2>
+                    <?php if ( $hh_writing ) : ?>
+                        <div class="actions">
+                            <button class="primary" type="submit"><?php echo esc_html__( 'Save', 'households' ); ?></button>
+                        </div>
+                    <?php endif; ?>
+                </div>
                 <ul class="plain">
                     <?php foreach ( $hh_places as $hh_one ) : ?>
                         <li class="row">
@@ -153,9 +161,6 @@ require __DIR__ . '/_head.php';
                         </li>
                     <?php endforeach; ?>
                 </ul>
-                <?php if ( $hh_writing ) : ?>
-                    <button class="primary" type="submit" style="margin-top:12px"><?php echo esc_html__( 'Save', 'households' ); ?></button>
-                <?php endif; ?>
             </form>
         </section>
 
