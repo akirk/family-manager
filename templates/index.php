@@ -25,13 +25,27 @@ $hh_party = $hh_me ? $hh_day['party'] : [];
 // phpcs:disable WordPress.Security.NonceVerification.Recommended
 $hh_mine = ! empty( $_GET['mine'] );
 $hh_adding = ! empty( $_GET['add'] );
+// Everything ever ticked off here, rather than the last week of it.
+$hh_earlier = ! empty( $_GET['earlier'] );
 // phpcs:enable WordPress.Security.NonceVerification.Recommended
 $hh_url = remove_query_arg( 'problem' );
 
+// Ticking something off does not take it away: it stays where it was, struck
+// through, for a week, which is long enough to see it go and to put it back.
+// Older than that it goes quiet, and how many went quiet is what says whether
+// there is anything to offer to look at again.
+$hh_kept_since = Storage::done_cutoff();
 $hh_tasks = [];
+$hh_quiet = 0;
 foreach ( isset( $hh_here['tasks'] ) ? $hh_here['tasks'] : [] as $hh_task ) {
-    if ( $hh_task['is_done'] || ( $hh_mine && $hh_task['person_id'] !== $hh_me ) ) {
+    if ( $hh_mine && $hh_task['person_id'] !== $hh_me ) {
         continue;
+    }
+    if ( $hh_task['is_done'] && $hh_task['done_at'] < $hh_kept_since ) {
+        ++$hh_quiet;
+        if ( ! $hh_earlier ) {
+            continue;
+        }
     }
     $hh_tasks[] = $hh_task;
 }
@@ -79,6 +93,13 @@ require __DIR__ . '/_head.php';
                                     href="<?php echo esc_url( $hh_mine ? remove_query_arg( 'mine', $hh_url ) : add_query_arg( 'mine', 1, $hh_url ) ); ?>">
                                     <?php echo $hh_mine ? esc_html__( 'everyone', 'households' ) : esc_html__( 'just me', 'households' ); ?>
                                 </a>
+                                <?php // A filter over a list you are reading, so it waits for there to be one: an empty list says where the rest went in words instead. ?>
+                                <?php if ( ( $hh_tasks && $hh_quiet ) || $hh_earlier ) : ?>
+                                    <a class="pill" data-hh-live
+                                        href="<?php echo esc_url( $hh_earlier ? remove_query_arg( 'earlier', $hh_url ) : add_query_arg( 'earlier', 1, $hh_url ) ); ?>">
+                                        <?php echo $hh_earlier ? esc_html__( 'the past week', 'households' ) : esc_html__( 'done earlier', 'households' ); ?>
+                                    </a>
+                                <?php endif; ?>
                                 <?php if ( $hh_can_add ) : ?>
                                     <?php // A link that asks the page for the form; the script opens the one already here instead. ?>
                                     <a class="pill" data-hh-add href="<?php echo esc_url( $hh_adding ? $hh_close : $hh_open ); ?>"
@@ -127,6 +148,10 @@ require __DIR__ . '/_head.php';
                                     ? esc_html__( 'Nothing here is asked of you.', 'households' )
                                     : esc_html__( 'Nothing to do here.', 'households' );
                                 ?>
+                                <?php // An empty list with something behind it says where the rest went; the pill above it is the same door, and this is the one place you would look for it. ?>
+                                <?php if ( $hh_quiet && ! $hh_earlier ) : ?>
+                                    <a data-hh-live href="<?php echo esc_url( add_query_arg( 'earlier', 1, $hh_url ) ); ?>"><?php echo esc_html__( 'See what was done earlier.', 'households' ); ?></a>
+                                <?php endif; ?>
                             </li>
                         <?php endif; ?>
                         <?php $hh_task_home = $hh_where['home_id']; ?>
