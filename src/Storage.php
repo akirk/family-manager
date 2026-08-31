@@ -1338,6 +1338,11 @@ class Storage {
                 'title'     => $post->post_title,
                 'person_id' => $person_id,
                 'person'    => $person ? $person->post_title : '',
+                // Who wrote it down and when. A household list is written by
+                // several hands, and the answer to "who asked for this?" is
+                // worth having without a word of it on the line.
+                'added_by'  => $this->who_wrote( (int) $post->post_author ),
+                'added_at'  => $post->post_date,
                 'task_type' => get_post_meta( $post->ID, self::META_TASK_TYPE, true ) ?: 'task',
                 'due_date'  => (string) get_post_meta( $post->ID, self::META_DUE_DATE, true ),
                 // When it was ticked off, so a list can keep the recent ones
@@ -1358,6 +1363,23 @@ class Storage {
             return strcmp( $a['due_date'] ?: '9999-12-31', $b['due_date'] ?: '9999-12-31' );
         } );
         return $tasks;
+    }
+
+    /**
+     * The person behind an account, said as the app says people: by the name
+     * the household knows them by. An account with nobody's page attached is
+     * whoever WordPress says they are, and no account at all is nobody.
+     */
+    private function who_wrote( int $user_id ): string {
+        if ( ! $user_id ) {
+            return '';
+        }
+        $person = get_post( Access::person_for_user( $user_id ) );
+        if ( $person ) {
+            return $person->post_title;
+        }
+        $user = get_userdata( $user_id );
+        return $user ? $user->display_name : '';
     }
 
     public function toggle_task( int $home_id, int $task_id ): bool {

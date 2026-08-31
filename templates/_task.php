@@ -32,6 +32,23 @@ if ( 'appointment' === $hh_task['task_type'] ) {
 }
 // Nothing done is late, whenever it was due.
 $hh_overdue = ! $hh_task['is_done'] && $hh_task['due_date'] && $hh_task['due_date'] < current_time( 'Y-m-d' );
+
+// Who wrote it down and when, kept under the cursor rather than said on the
+// line: a list is read to find what is still to do, and whose idea it was is
+// the question after that one.
+$hh_written = '';
+if ( ! empty( $hh_task['added_at'] ) ) {
+    $hh_when = mysql2date( get_option( 'date_format' ) . ', ' . get_option( 'time_format' ), $hh_task['added_at'] );
+    $hh_written = empty( $hh_task['added_by'] )
+        /* translators: %s: a date and time. */
+        ? sprintf( __( 'Written down on %s', 'households' ), $hh_when )
+        : sprintf(
+            /* translators: 1: a person's name. 2: a date and time. */
+            __( 'Written down by %1$s on %2$s', 'households' ),
+            $hh_task['added_by'],
+            $hh_when
+        );
+}
 ?>
 <li class="row">
     <form method="post" class="actions grow">
@@ -39,7 +56,7 @@ $hh_overdue = ! $hh_task['is_done'] && $hh_task['due_date'] && $hh_task['due_dat
         <?php // Ticking it off is a tick, and unticking it is the same tick again. The button behind it is what does the ticking when there is no script to notice the box. ?>
         <label class="inline">
             <input type="checkbox" data-hh-tick <?php checked( $hh_task['is_done'] ); ?>>
-            <span class="<?php echo $hh_task['is_done'] ? 'done' : ''; ?>">
+            <span class="<?php echo $hh_task['is_done'] ? 'done' : ''; ?>" title="<?php echo esc_attr( $hh_written ); ?>">
                 <?php echo esc_html( $hh_task['title'] ); ?>
                 <?php if ( $hh_bits ) : ?>
                     <span class="meta">· <?php echo esc_html( implode( ' · ', $hh_bits ) ); ?></span>
