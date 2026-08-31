@@ -12,11 +12,12 @@
  * at a time that reads as it being in several — unless this is not one of
  * those houses at all, and the thing is only here, in which case where it
  * belongs is the one thing worth saying. Across households, where no heading
- * has said anything, the line says which house it is at and where in that
- * house it should be, and nothing else: a list read with no heading over it is
- * a list being read to find something. $hh_thing_at_said says a heading has
- * already answered where it is, however it answered — a household of yours, or
- * that it is somewhere that is not. $hh_thing_writing says whether this page offers anything to be said at
+ * has said anything, the line says which house it is at and, beside it, where
+ * in that house it should be — nothing else, and not one without the other,
+ * because a list read with no heading over it is a list being read to find
+ * something and a place means nothing without the house it is in.
+ * $hh_thing_at_said says a heading has already answered where it is, however
+ * it answered — a household of yours, or that it is somewhere that is not. $hh_thing_writing says whether this page offers anything to be said at
  * all — a household read as somebody else is being read rather than organised,
  * and a list on the overview is a shelf being looked at. $hh_thing_going_said
  * is for a heading that is itself a trip and has named where it is going.
@@ -129,8 +130,8 @@ $hh_thing_tick = $hh_thing_writing
             <?php if ( $hh_thing_where ) : ?>
                 <div class="meta"><?php echo esc_html( $hh_thing_where ); ?></div>
             <?php endif; ?>
-        <?php elseif ( $hh_thing_home ) : ?>
-            <?php // Here, but this is not one of the houses with a place for it: brought along, borrowed, left behind. Where it belongs is the one thing worth saying about it here. ?>
+        <?php elseif ( $hh_thing_at_said ) : ?>
+            <?php // Under a heading that has said where it is, and this is not one of the houses with a place for it: brought along, borrowed, left behind, or away somewhere that is not yours. Where it belongs is the one thing worth saying about it here. ?>
             <?php if ( $hh_thing_also ) : ?>
                 <div class="meta">
                     <?php
@@ -144,9 +145,6 @@ $hh_thing_tick = $hh_thing_writing
             <?php else : ?>
                 <div class="meta"><?php echo esc_html__( 'Kept somewhere that is not yours.', 'households' ); ?></div>
             <?php endif; ?>
-        <?php elseif ( $hh_thing_at_where ) : ?>
-            <?php // Where it should be at the house it is at, which is the only one of its places that is any use for finding it. ?>
-            <div class="meta"><?php echo esc_html( $hh_thing_at_where ); ?></div>
         <?php endif; ?>
         <?php if ( $hh_thing_at_named ) : ?>
             <div class="meta">
@@ -159,20 +157,25 @@ $hh_thing_tick = $hh_thing_writing
             <div class="meta"><?php echo esc_html__( 'It is not at any of your households just now.', 'households' ); ?></div>
         <?php endif; ?>
     </div>
-    <?php // Which house it is at, on the line the thing is on, because a list with no heading over it is a list being read to find something. ?>
+    <?php // Which house it is at and where in that house it should be, together on the line the thing is on: a list with no heading over it is a list being read to find something, and the second answer means nothing without the first. ?>
     <?php if ( ! $hh_thing_at_said ) : ?>
-        <?php if ( $hh_thing_at_mine ) : ?>
-            <a class="pill" href="<?php echo esc_url( View::home_url( $hh_thing_at['home_id'] ) ); ?>">
-                <?php
-                /* translators: %s: the name of a household. */
-                echo esc_html( sprintf( __( 'at %s', 'households' ), $hh_thing_at['name'] ) );
-                ?>
-            </a>
-        <?php elseif ( ! empty( $hh_thing_at['home_id'] ) ) : ?>
-            <span class="pill"><?php echo esc_html__( 'somewhere that is not yours', 'households' ); ?></span>
-        <?php else : ?>
-            <span class="pill"><?php echo esc_html__( 'nobody has said', 'households' ); ?></span>
-        <?php endif; ?>
+        <div class="actions">
+            <?php if ( $hh_thing_at_mine ) : ?>
+                <a class="pill" href="<?php echo esc_url( View::home_url( $hh_thing_at['home_id'] ) ); ?>">
+                    <?php
+                    /* translators: %s: the name of a household. */
+                    echo esc_html( sprintf( __( 'at %s', 'households' ), $hh_thing_at['name'] ) );
+                    ?>
+                </a>
+                <?php if ( $hh_thing_at_where ) : ?>
+                    <span class="meta"><?php echo esc_html( $hh_thing_at_where ); ?></span>
+                <?php endif; ?>
+            <?php elseif ( ! empty( $hh_thing_at['home_id'] ) ) : ?>
+                <span class="pill"><?php echo esc_html__( 'somewhere that is not yours', 'households' ); ?></span>
+            <?php else : ?>
+                <span class="pill"><?php echo esc_html__( 'nobody has said', 'households' ); ?></span>
+            <?php endif; ?>
+        </div>
     <?php endif; ?>
     <?php // Where it is to go is a house on the line the thing is on, and a tick beside it where there is no box to say the same thing. The words are still there for anyone the arrow does not reach. ?>
     <?php if ( $hh_thing_goes_named ) : ?>
