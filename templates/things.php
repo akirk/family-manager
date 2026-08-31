@@ -58,6 +58,35 @@ require __DIR__ . '/_head.php';
                         href="<?php echo esc_url( $hh_flat ? remove_query_arg( 'flat', $hh_url ) : add_query_arg( 'flat', 1, $hh_url ) ); ?>">
                         <?php echo esc_html__( 'by household', 'households' ); ?>
                     </a>
+                    <?php if ( $hh_writable ) : ?>
+                    <details class="add">
+                        <summary><?php echo esc_html__( '+ Add', 'households' ); ?></summary>
+                        <form method="post" class="grid">
+                            <?php View::fields( 'add_note', [ 'kind' => 'item' ] ); ?>
+                            <label><?php echo esc_html__( 'Thing', 'households' ); ?>
+                                <input type="text" name="title" required>
+                            </label>
+                            <label><?php echo esc_html__( 'Where it lives', 'households' ); ?>
+                                <input type="text" name="detail">
+                            </label>
+                            <?php // One household to keep it in is not a question; the form says which it is and asks nothing. ?>
+                            <?php if ( count( $hh_writable ) > 1 ) : ?>
+                                <label><?php echo esc_html__( 'At which household', 'households' ); ?>
+                                    <select name="home_id">
+                                        <?php foreach ( $hh_writable as $hh_home ) : ?>
+                                            <option value="<?php echo (int) $hh_home['id']; ?>" <?php selected( $hh_home['id'], $hh_default_home ); ?>>
+                                                <?php echo esc_html( $hh_home['name'] ); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </label>
+                            <?php else : ?>
+                                <input type="hidden" name="home_id" value="<?php echo (int) $hh_writable[0]['id']; ?>">
+                            <?php endif; ?>
+                            <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
+                        </form>
+                    </details>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -89,34 +118,5 @@ require __DIR__ . '/_head.php';
                 <?php endforeach; ?>
             <?php endif; ?>
 
-            <?php if ( $hh_writable ) : ?>
-                <details class="add">
-                    <summary><?php echo esc_html__( '+ Add', 'households' ); ?></summary>
-                    <form method="post" class="grid">
-                        <?php View::fields( 'add_note', [ 'kind' => 'item' ] ); ?>
-                        <label><?php echo esc_html__( 'Thing', 'households' ); ?>
-                            <input type="text" name="title" required>
-                        </label>
-                        <label><?php echo esc_html__( 'Where it lives', 'households' ); ?>
-                            <input type="text" name="detail">
-                        </label>
-                        <?php // One household to keep it in is not a question; the form says which it is and asks nothing. ?>
-                        <?php if ( count( $hh_writable ) > 1 ) : ?>
-                            <label><?php echo esc_html__( 'At which household', 'households' ); ?>
-                                <select name="home_id">
-                                    <?php foreach ( $hh_writable as $hh_home ) : ?>
-                                        <option value="<?php echo (int) $hh_home['id']; ?>" <?php selected( $hh_home['id'], $hh_default_home ); ?>>
-                                            <?php echo esc_html( $hh_home['name'] ); ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </label>
-                        <?php else : ?>
-                            <input type="hidden" name="home_id" value="<?php echo (int) $hh_writable[0]['id']; ?>">
-                        <?php endif; ?>
-                        <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-                    </form>
-                </details>
-            <?php endif; ?>
         </section>
 <?php require __DIR__ . '/_foot.php'; ?>

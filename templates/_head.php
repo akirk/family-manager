@@ -104,6 +104,8 @@ $hh_title = isset( $hh_title ) && '' !== trim( $hh_title ) ? $hh_title : __( 'Ho
            takes the whole width of that line rather than a corner of it. */
         .row.heading details.add { margin-top: 0; }
         .row.heading details.add[open] { flex: 1 1 100%; }
+        /* Beside other controls it is the whole group that gives up the line. */
+        .row.heading .actions:has(details.add[open]) { flex: 1 1 100%; }
         ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
         .row { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
         .meta { color: var(--hh-muted); font-size: 0.9rem; }
