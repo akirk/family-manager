@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Households
  * Description: A WpApp dashboard for a household, or for several: who is at which home, shared tasks and appointments, and what each house needs people to know.
- * Version: 1.1.0
+ * Version: 1.1.0+39966ea79321
  * Author: Alex Kirk
  * Text Domain: households
  * Tested up to: 7.1
