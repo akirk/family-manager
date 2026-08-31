@@ -313,7 +313,7 @@ require __DIR__ . '/_head.php';
                 </section>
 
                 <section id="hh-agenda" data-hh-live-section>
-                    <h2><a href="<?php echo esc_url( View::base() . 'where/' ); ?>"><?php echo esc_html__( 'Who is where', 'households' ); ?></a></h2>
+                    <h2><a href="<?php echo esc_url( View::base() . 'where/' ); ?>"><?php echo esc_html__( 'People', 'households' ); ?></a></h2>
                     <ul class="plain">
                         <?php if ( ! $hh_day['agenda'] ) : ?>
                             <li class="empty"><?php echo esc_html__( 'Nothing due, nobody moving, no birthdays in the next fortnight.', 'households' ); ?></li>
