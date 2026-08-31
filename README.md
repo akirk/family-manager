@@ -3,8 +3,7 @@
 A WordPress app for running a household — or several. Most family apps assume
 one home; this one is built for the families that have more than one. Built on
 [WpApp](https://github.com/akirk/wp-app), so it runs as its own app at
-`/households/` instead of inside wp-admin. A home is a term, everything in it
-is a post tagged with that term, and there are no custom tables.
+`/households/` instead of inside wp-admin.
 
 [Try Households in WordPress Playground](https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/akirk/households/main/blueprint.json) · [Try it with demo data](https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/akirk/households/main/demo.json)
 
@@ -43,15 +42,16 @@ is a post tagged with that term, and there are no custom tables.
   they are not in yet puts them in it. Leaving is separate and deliberate, and
   removes the membership only: the person record and everything written on it
   stays.
-- **People without accounts.** A person is a post; the WordPress login is
-  optional identity attached to it via `post_author`, or nobody at all. That is
-  how a toddler whose shoe size is worth writing down gets a record. The plugin
-  mints no accounts — they are made in WordPress and pointed at a person from
-  the manage page.
+- **People without accounts.** Everyone in a home has a record whether or not
+  they can log in, which is how a toddler whose shoe size is worth writing down
+  gets one. A record can be pointed at a WordPress account, or at nobody at
+  all. The plugin mints no accounts — they are made in WordPress and pointed at
+  a person from the manage page.
 - **What travels with a person.** Clothing and shoe size are fields, each
   stamped with the day the value last changed, so a size not measured since
   spring says so. Everything else — allergies, medication, what somebody
-  minding them should know — is the post content, with revisions.
+  minding them should know — is written on the person, and earlier versions are
+  kept.
 - **About this home.** The wifi network, where the water main valve is, which
   day the bins go out: facts that are true of the place, readable by everyone
   in it.
@@ -69,12 +69,9 @@ is a post tagged with that term, and there are no custom tables.
   fortnight already holds, and the whole bag is carried in one press. A trip
   with something waiting says so beside the move on the overview and beside the
   handover on the board.
-- **Two decisions, not five roles.** Whether someone administers a home is per
-  home and lives in term meta; whether someone is a child is a property of the
-  person. Both are asked through the ordinary capability API —
-  `current_user_can( 'manage_household', $home_id )` and
-  `organise_household` — so the plugin invents no permission language of its
-  own.
+- **Two decisions, not five roles.** Whether someone administers a home is
+  asked per home; whether someone is a child is a property of the person.
+  Nothing else is a role, so there is no permission language to learn.
 
 ## Install
 
@@ -88,6 +85,14 @@ and a logged-in user.
 
 ## Development notes
 
+- A home is a term, everything in it is a post tagged with that term, and there
+  are no custom tables. A person is a post, and a WordPress login is optional
+  identity attached to it via `post_author`. What is written about a person is
+  the post content, so it has revisions.
+- The two permission decisions are asked through the ordinary capability API —
+  `current_user_can( 'manage_household', $home_id )` and `organise_household`.
+  Whether someone administers a home lives in term meta; whether someone is a
+  child lives on the person.
 - No build step. Every page is server-rendered PHP: it reads through `Storage`,
   and every change is a `<form method="post">` posting back to the page it was
   made on. A `template_redirect` handler checks the nonce, does the work, and
