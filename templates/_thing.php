@@ -144,23 +144,35 @@ $hh_thing_tick = $hh_thing_writing
         <?php elseif ( $hh_thing_at_worth ) : ?>
             <div class="meta"><?php echo esc_html__( 'It is not at any of your households just now.', 'households' ); ?></div>
         <?php endif; ?>
-        <?php if ( $hh_thing_goes_named && $hh_thing_goes['home_id'] === $hh_thing_home ) : ?>
-            <?php // Read at the household it is coming to, the household to name is this one, which the heading has said. ?>
-            <div class="meta">
-                <a href="<?php echo esc_url( View::pack_url( $hh_thing_goes_from, $hh_thing_goes['home_id'] ) ); ?>"><?php echo esc_html__( 'It is on its way here.', 'households' ); ?></a>
-            </div>
-        <?php elseif ( $hh_thing_goes_named ) : ?>
-            <div class="meta">
-                <?php
-                printf(
-                    /* translators: %s: a link naming a household, and what else is going there. */
-                    esc_html__( 'It is to go to %s.', 'households' ),
-                    '<a href="' . esc_url( View::pack_url( $hh_thing_goes_from, $hh_thing_goes['home_id'] ) ) . '">' . esc_html( $hh_thing_goes['name'] ) . '</a>'
-                );
-                ?>
-            </div>
-        <?php endif; ?>
     </div>
+    <?php // Where it is to go is a house on the line the thing is on, and a tick beside it where there is no box to say the same thing. The words are still there for anyone the arrow does not reach. ?>
+    <?php if ( $hh_thing_goes_named ) : ?>
+        <?php $hh_thing_goes_here = $hh_thing_goes['home_id'] === $hh_thing_home; ?>
+        <a class="pill<?php echo $hh_thing_goes['is_packed'] ? '' : ' warm'; ?>"
+            href="<?php echo esc_url( View::pack_url( $hh_thing_goes_from, $hh_thing_goes['home_id'] ) ); ?>"
+            aria-label="<?php
+            echo esc_attr( $hh_thing_goes_here
+                ? ( $hh_thing_goes['is_packed']
+                    ? __( 'It is in the bag, on its way here.', 'households' )
+                    : __( 'It is on its way here.', 'households' ) )
+                : sprintf(
+                    $hh_thing_goes['is_packed']
+                        /* translators: %s: the name of a household. */
+                        ? __( 'It is in the bag for %s.', 'households' )
+                        /* translators: %s: the name of a household. */
+                        : __( 'It is to go to %s.', 'households' ),
+                    $hh_thing_goes['name']
+                ) );
+            ?>">
+            <?php // Read at the household it is coming to, the household to name is this one, which the heading has said. ?>
+            <?php
+            echo $hh_thing_goes_here
+                ? esc_html__( 'on its way here', 'households' )
+                : '&rarr;&nbsp;' . esc_html( $hh_thing_goes['name'] );
+            echo $hh_thing_goes['is_packed'] && ! $hh_thing_tick ? '&nbsp;&check;' : '';
+            ?>
+        </a>
+    <?php endif; ?>
     <?php // Where it has got to is not where it belongs, so saying it is here leaves every line about where it lives as it was. ?>
     <?php if ( $hh_thing_here_now ) : ?>
         <form method="post">

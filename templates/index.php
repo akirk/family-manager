@@ -219,21 +219,24 @@ require __DIR__ . '/_head.php';
                                     <?php elseif ( $hh_thing_away ) : ?>
                                         <div class="meta"><?php echo esc_html__( 'It is not at any of your households just now.', 'households' ); ?></div>
                                     <?php endif; ?>
-                                    <?php if ( $hh_thing_goes_named ) : ?>
-                                        <div class="meta">
-                                            <?php
-                                            printf(
-                                                $hh_thing_goes['is_packed']
-                                                    /* translators: %s: a link naming a household, and what else is going there. */
-                                                    ? esc_html__( 'In the bag for %s.', 'households' )
-                                                    /* translators: %s: a link naming a household, and what else is going there. */
-                                                    : esc_html__( 'To be packed for %s.', 'households' ),
-                                                '<a href="' . esc_url( View::pack_url( $hh_where['home_id'], (int) $hh_thing_goes['home_id'] ) ) . '">' . esc_html( $hh_thing_goes['name'] ) . '</a>'
-                                            );
-                                            ?>
-                                        </div>
-                                    <?php endif; ?>
                                 </div>
+                                <?php // Where it is to go is a house and a tick, on the line the thing is on: a shelf being read before leaving it wants the answer, not a sentence about the answer. The words are still there for anyone the arrow does not reach. ?>
+                                <?php if ( $hh_thing_goes_named ) : ?>
+                                    <a class="pill<?php echo $hh_thing_goes['is_packed'] ? '' : ' warm'; ?>"
+                                        href="<?php echo esc_url( View::pack_url( $hh_where['home_id'], (int) $hh_thing_goes['home_id'] ) ); ?>"
+                                        aria-label="<?php
+                                        echo esc_attr( sprintf(
+                                            $hh_thing_goes['is_packed']
+                                                /* translators: %s: the name of a household. */
+                                                ? __( 'In the bag for %s.', 'households' )
+                                                /* translators: %s: the name of a household. */
+                                                : __( 'To be packed for %s.', 'households' ),
+                                            $hh_thing_goes['name']
+                                        ) );
+                                        ?>">
+                                        &rarr;&nbsp;<?php echo esc_html( $hh_thing_goes['name'] ); ?><?php echo $hh_thing_goes['is_packed'] ? '&nbsp;&check;' : ''; ?>
+                                    </a>
+                                <?php endif; ?>
                             </li>
                         <?php endforeach; ?>
                     </ul>
