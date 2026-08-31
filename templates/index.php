@@ -45,8 +45,34 @@ $hh_sifted = Storage::sift_tasks( $hh_ours, $hh_earlier );
 $hh_tasks = $hh_sifted['tasks'];
 $hh_quiet = $hh_sifted['quiet'];
 $hh_can_add = ! empty( $hh_here['viewer']['can_organise'] );
-$hh_open = add_query_arg( 'add', 1, $hh_url );
-$hh_close = remove_query_arg( 'add', $hh_url );
+
+// Writing a task down and putting one right are the same form, so which of the
+// two it is doing is the one question asked here: a task named in the URL, and
+// on the list being read, is the one the form opens with in it.
+$hh_form_task = [];
+foreach ( $hh_tasks as $hh_task ) {
+    if ( $hh_task['id'] === $hh_editing ) {
+        $hh_form_task = $hh_task;
+    }
+}
+
+// The shelf you can actually reach today, so a thing that lives here and has
+// gone somewhere else is not on it: this list is read to find something, and a
+// thing that is not in the house is not there to be found. The household's own
+// page still keeps it, because that list is what the house holds rather than
+// what is within arm's reach.
+$hh_shelf = [];
+foreach ( isset( $hh_here['items'] ) ? $hh_here['items'] : [] as $hh_thing ) {
+    $hh_thing_at = ! empty( $hh_thing['at'] ) ? $hh_thing['at'] : [];
+    if ( ! empty( $hh_thing_at['home_id'] ) && $hh_thing_at['home_id'] !== $hh_here['home']['id'] ) {
+        continue;
+    }
+    $hh_shelf[] = $hh_thing;
+}
+// The page with the form shut, which is where a form that was opened by the URL
+// posts back to and what the way out of it points at.
+$hh_shut = remove_query_arg( [ 'add', 'edit' ], $hh_url );
+$hh_open = add_query_arg( 'add', 1, $hh_shut );
 
 $hh_title = __( 'Overview', 'households' );
 
@@ -70,16 +96,21 @@ require __DIR__ . '/_head.php';
             <div>
                 <section id="hh-todo" data-hh-live-section>
                     <div class="row heading">
+                        <?php // The heading is the way on, as it is over the households: it names the house the list is of, and opens it. ?>
                         <h2>
-                            <?php
-                            echo $hh_where['known']
-                                ? esc_html( sprintf(
-                                    /* translators: %s: the name of a household. */
-                                    __( 'To do in %s', 'households' ),
-                                    $hh_where['name']
-                                ) )
-                                : esc_html__( 'To do', 'households' );
-                            ?>
+                            <?php if ( $hh_where['known'] ) : ?>
+                                <a href="<?php echo esc_url( View::home_url( $hh_where['home_id'] ) ); ?>">
+                                    <?php
+                                    echo esc_html( sprintf(
+                                        /* translators: %s: the name of a household. */
+                                        __( 'To do in %s', 'households' ),
+                                        $hh_where['name']
+                                    ) );
+                                    ?>
+                                </a>
+                            <?php else : ?>
+                                <?php echo esc_html__( 'To do', 'households' ); ?>
+                            <?php endif; ?>
                         </h2>
                         <?php if ( $hh_where['known'] ) : ?>
                             <div class="actions">
@@ -95,10 +126,15 @@ require __DIR__ . '/_head.php';
                                         <?php echo $hh_earlier ? esc_html__( 'the past week', 'households' ) : esc_html__( 'done earlier', 'households' ); ?>
                                     </a>
                                 <?php endif; ?>
-                                <?php if ( $hh_can_add ) : ?>
+                                <?php if ( $hh_can_add && $hh_form_task ) : ?>
+                                    <?php // The form has a task in it, which is a row of the list not being shown as a row: shutting it is the list back as it was, so it is the page being asked for rather than something hidden. ?>
+                                    <a class="pill" data-hh-live href="<?php echo esc_url( $hh_shut ); ?>"
+                                        aria-controls="add" aria-expanded="true"
+                                        aria-label="<?php echo esc_attr__( 'Leave it as it was', 'households' ); ?>">&times;</a>
+                                <?php elseif ( $hh_can_add ) : ?>
                                     <?php // A link that asks the page for the form; the script opens the one already here instead. ?>
-                                    <a class="pill" data-hh-add href="<?php echo esc_url( $hh_adding ? $hh_close : $hh_open ); ?>"
-                                        data-hh-open="<?php echo esc_url( $hh_open ); ?>" data-hh-close="<?php echo esc_url( $hh_close ); ?>"
+                                    <a class="pill" data-hh-add href="<?php echo esc_url( $hh_adding ? $hh_shut : $hh_open ); ?>"
+                                        data-hh-open="<?php echo esc_url( $hh_open ); ?>" data-hh-close="<?php echo esc_url( $hh_shut ); ?>"
                                         aria-controls="add" aria-expanded="<?php echo $hh_adding ? 'true' : 'false'; ?>"
                                         aria-label="<?php echo esc_attr__( 'Write something down', 'households' ); ?>"><?php echo $hh_adding ? '&times;' : '+'; ?></a>
                                 <?php endif; ?>
@@ -107,30 +143,14 @@ require __DIR__ . '/_head.php';
                     </div>
 
                     <?php if ( $hh_can_add ) : ?>
-                        <form method="post" class="grid" id="add" style="margin-bottom:12px" <?php echo $hh_adding ? '' : 'hidden'; ?>>
-                            <?php View::fields( 'add_task', [ 'home_id' => $hh_where['home_id'] ] ); ?>
-                            <label class="wide"><?php echo esc_html__( 'What needs doing', 'households' ); ?>
-                                <input type="text" name="title" required <?php echo $hh_adding ? 'autofocus' : ''; ?>>
-                            </label>
-                            <label><?php echo esc_html__( 'For whom', 'households' ); ?>
-                                <select name="person_id">
-                                    <option value="0"><?php echo esc_html__( 'Everyone', 'households' ); ?></option>
-                                    <?php foreach ( $hh_here['people'] as $hh_person ) : ?>
-                                        <option value="<?php echo (int) $hh_person['id']; ?>"><?php echo esc_html( $hh_person['name'] ); ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </label>
-                            <label><?php echo esc_html__( 'Kind', 'households' ); ?>
-                                <select name="task_type">
-                                    <option value="task"><?php echo esc_html__( 'Task', 'households' ); ?></option>
-                                    <option value="appointment"><?php echo esc_html__( 'Appointment', 'households' ); ?></option>
-                                </select>
-                            </label>
-                            <label><?php echo esc_html__( 'When', 'households' ); ?>
-                                <input type="date" name="due_date">
-                            </label>
-                            <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-                        </form>
+                        <?php
+                        $hh_form_home = $hh_where['home_id'];
+                        $hh_form_people = $hh_here['people'];
+                        $hh_form_homes = View::storage()->homes_you_organise( $hh_user );
+                        $hh_form_shut = $hh_shut;
+                        $hh_form_open = $hh_adding || $hh_form_task;
+                        require __DIR__ . '/_task-form.php';
+                        ?>
                     <?php endif; ?>
 
                     <ul class="plain">
@@ -152,7 +172,6 @@ require __DIR__ . '/_head.php';
                         <?php
                         $hh_task_home = $hh_where['home_id'];
                         $hh_task_url = $hh_url;
-                        $hh_task_people = isset( $hh_here['people'] ) ? $hh_here['people'] : [];
                         $hh_task_writing = $hh_can_add;
                         $hh_task_editing = $hh_editing;
                         ?>
@@ -166,15 +185,19 @@ require __DIR__ . '/_head.php';
                 <section>
                     <div class="row heading">
                         <h2>
-                            <?php
-                            echo $hh_where['known']
-                                ? esc_html( sprintf(
-                                    /* translators: %s: the name of a household. */
-                                    __( 'Things kept at %s', 'households' ),
-                                    $hh_where['name']
-                                ) )
-                                : esc_html__( 'Things kept where you are', 'households' );
-                            ?>
+                            <?php if ( $hh_where['known'] ) : ?>
+                                <a href="<?php echo esc_url( View::home_url( $hh_where['home_id'] ) ); ?>">
+                                    <?php
+                                    echo esc_html( sprintf(
+                                        /* translators: %s: the name of a household. */
+                                        __( 'Things at %s', 'households' ),
+                                        $hh_where['name']
+                                    ) );
+                                    ?>
+                                </a>
+                            <?php else : ?>
+                                <?php echo esc_html__( 'Things', 'households' ); ?>
+                            <?php endif; ?>
                         </h2>
                         <div class="actions">
                             <a class="pill" href="<?php echo esc_url( View::base() . 'things/' ); ?>"
@@ -188,15 +211,13 @@ require __DIR__ . '/_head.php';
                             <li class="empty"><?php echo esc_html__( 'Nothing says where you are today, so nothing can be said about what is within reach.', 'households' ); ?></li>
                         <?php elseif ( ! $hh_here['items'] ) : ?>
                             <li class="empty"><?php echo esc_html__( 'Nothing listed here yet.', 'households' ); ?></li>
+                        <?php elseif ( ! $hh_shelf ) : ?>
+                            <?php // Kept here, all of it somewhere else: the list is empty for a reason worth saying, since the household's own page will show them. ?>
+                            <li class="empty"><?php echo esc_html__( 'Everything kept here is somewhere else just now.', 'households' ); ?></li>
                         <?php endif; ?>
-                        <?php foreach ( isset( $hh_here['items'] ) ? $hh_here['items'] : [] as $hh_thing ) : ?>
+                        <?php foreach ( $hh_shelf as $hh_thing ) : ?>
                             <?php
-                            // The shelf you can actually reach, so a thing that
-                            // lives here but has gone somewhere else says so:
-                            // the drawer it lives in is no help today.
-                            $hh_thing_at = ! empty( $hh_thing['at'] ) ? $hh_thing['at'] : [];
-                            $hh_thing_away = ! empty( $hh_thing_at['home_id'] ) && $hh_thing_at['home_id'] !== $hh_here['home']['id'];
-                            // And a shelf you are about to leave is one to
+                            // A shelf you are about to leave is one to
                             // take things off: what is still to go in the bag
                             // is worth saying here, and so is what is already
                             // in it, because it is still on this shelf.
@@ -208,16 +229,6 @@ require __DIR__ . '/_head.php';
                                     <strong><a href="<?php echo esc_url( View::thing_url( $hh_thing['id'] ) ); ?>"><?php echo esc_html( $hh_thing['title'] ); ?></a></strong>
                                     <?php if ( $hh_thing['detail'] ) : ?>
                                         <div class="meta"><?php echo esc_html( $hh_thing['detail'] ); ?></div>
-                                    <?php endif; ?>
-                                    <?php if ( $hh_thing_away && Access::can_reach( $hh_user, $hh_thing_at['home_id'] ) ) : ?>
-                                        <div class="meta">
-                                            <?php
-                                            /* translators: %s: the name of a household. */
-                                            echo esc_html( sprintf( __( 'It is at %s just now.', 'households' ), $hh_thing_at['name'] ) );
-                                            ?>
-                                        </div>
-                                    <?php elseif ( $hh_thing_away ) : ?>
-                                        <div class="meta"><?php echo esc_html__( 'It is not at any of your households just now.', 'households' ); ?></div>
                                     <?php endif; ?>
                                 </div>
                                 <?php // Where it is to go is a house and a tick, on the line the thing is on: a shelf being read before leaving it wants the answer, not a sentence about the answer. The words are still there for anyone the arrow does not reach. ?>

@@ -31,13 +31,50 @@ $hh_writing = $hh_can_organise && ! $hh['viewer']['viewing_as'];
 $hh_earlier = ! empty( $_GET['earlier'] );
 $hh_adding = ! empty( $_GET['add'] );
 $hh_editing = isset( $_GET['edit'] ) ? (int) $_GET['edit'] : 0;
+// What this house knows about itself is asked the same way, in its own word so
+// that opening one form is not opening the other: a fact to put right by its
+// number, or a new one.
+$hh_facting = isset( $_GET['fact'] ) ? sanitize_key( wp_unslash( $_GET['fact'] ) ) : '';
 // phpcs:enable WordPress.Security.NonceVerification.Recommended
 $hh_url = remove_query_arg( 'problem' );
-$hh_open = add_query_arg( 'add', 1, $hh_url );
-$hh_close = remove_query_arg( 'add', $hh_url );
+// The page with every form shut, which is where a form opened by the URL posts
+// back to and what the way out of it points at.
+$hh_shut = remove_query_arg( [ 'add', 'edit', 'fact' ], $hh_url );
+$hh_open = add_query_arg( 'add', 1, $hh_shut );
+$hh_fact_new = add_query_arg( 'fact', 'new', $hh_shut );
+// What is here, which is not everything the house keeps: a thing that lives
+// here and has gone somewhere else is not on the shelf to be found. Where it
+// has got to is said on its own page, and at the household it is at, which is
+// the household that can say it has come back.
+$hh_here_now = [];
+foreach ( $hh['items'] as $hh_item ) {
+    $hh_item_at = ! empty( $hh_item['at'] ) ? $hh_item['at'] : [];
+    if ( ! empty( $hh_item_at['home_id'] ) && $hh_item_at['home_id'] !== $hh['home']['id'] ) {
+        continue;
+    }
+    $hh_here_now[] = $hh_item;
+}
 $hh_sifted = Storage::sift_tasks( $hh['tasks'], $hh_earlier );
 $hh_tasks = $hh_sifted['tasks'];
 $hh_quiet = $hh_sifted['quiet'];
+// Writing a task down and putting one right are the same form, so which of the
+// two it is doing is the one question asked here: a task named in the URL, and
+// on the list being read, is the one the form opens with in it.
+$hh_form_task = [];
+foreach ( $hh_tasks as $hh_task ) {
+    if ( $hh_task['id'] === $hh_editing ) {
+        $hh_form_task = $hh_task;
+    }
+}
+// And the same question about the house itself: which fact the form has, if it
+// has one, and whether it is open at all.
+$hh_fact_note = [];
+foreach ( $hh['facts'] as $hh_fact ) {
+    if ( (string) $hh_fact['id'] === $hh_facting ) {
+        $hh_fact_note = $hh_fact;
+    }
+}
+$hh_fact_showing = $hh_writing && ( 'new' === $hh_facting || $hh_fact_note );
 ?>
         <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Overview', 'households' ); ?></a>
         <h1><?php echo esc_html( $hh['home']['name'] ); ?></h1>
@@ -81,10 +118,15 @@ $hh_quiet = $hh_sifted['quiet'];
                             <?php echo $hh_earlier ? esc_html__( 'the past week', 'households' ) : esc_html__( 'done earlier', 'households' ); ?>
                         </a>
                     <?php endif; ?>
-                    <?php if ( $hh_writing ) : ?>
+                    <?php if ( $hh_writing && $hh_form_task ) : ?>
+                        <?php // The form has a task in it, which is a row of the list not being shown as a row: shutting it is the list back as it was, so it is the page being asked for rather than something hidden. ?>
+                        <a class="pill" data-hh-live href="<?php echo esc_url( $hh_shut ); ?>"
+                            aria-controls="add" aria-expanded="true"
+                            aria-label="<?php echo esc_attr__( 'Leave it as it was', 'households' ); ?>">&times;</a>
+                    <?php elseif ( $hh_writing ) : ?>
                         <?php // A link that asks the page for the form; the script opens the one already here instead. ?>
-                        <a class="pill" data-hh-add href="<?php echo esc_url( $hh_adding ? $hh_close : $hh_open ); ?>"
-                            data-hh-open="<?php echo esc_url( $hh_open ); ?>" data-hh-close="<?php echo esc_url( $hh_close ); ?>"
+                        <a class="pill" data-hh-add href="<?php echo esc_url( $hh_adding ? $hh_shut : $hh_open ); ?>"
+                            data-hh-open="<?php echo esc_url( $hh_open ); ?>" data-hh-close="<?php echo esc_url( $hh_shut ); ?>"
                             aria-controls="add" aria-expanded="<?php echo $hh_adding ? 'true' : 'false'; ?>"
                             aria-label="<?php echo esc_attr__( 'Write something down', 'households' ); ?>"><?php echo $hh_adding ? '&times;' : '+'; ?></a>
                     <?php endif; ?>
@@ -92,30 +134,14 @@ $hh_quiet = $hh_sifted['quiet'];
             </div>
 
             <?php if ( $hh_writing ) : ?>
-                <form method="post" class="grid" id="add" style="margin-bottom:12px" <?php echo $hh_adding ? '' : 'hidden'; ?>>
-                    <?php View::fields( 'add_task', [ 'home_id' => $hh_home_id ] ); ?>
-                    <label class="wide"><?php echo esc_html__( 'What needs doing', 'households' ); ?>
-                        <input type="text" name="title" required <?php echo $hh_adding ? 'autofocus' : ''; ?>>
-                    </label>
-                    <label><?php echo esc_html__( 'For whom', 'households' ); ?>
-                        <select name="person_id">
-                            <option value="0"><?php echo esc_html__( 'Everyone', 'households' ); ?></option>
-                            <?php foreach ( $hh['people'] as $hh_person ) : ?>
-                                <option value="<?php echo (int) $hh_person['id']; ?>"><?php echo esc_html( $hh_person['name'] ); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </label>
-                    <label><?php echo esc_html__( 'Kind', 'households' ); ?>
-                        <select name="task_type">
-                            <option value="task"><?php echo esc_html__( 'Task', 'households' ); ?></option>
-                            <option value="appointment"><?php echo esc_html__( 'Appointment', 'households' ); ?></option>
-                        </select>
-                    </label>
-                    <label><?php echo esc_html__( 'When', 'households' ); ?>
-                        <input type="date" name="due_date">
-                    </label>
-                    <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-                </form>
+                <?php
+                $hh_form_home = $hh_home_id;
+                $hh_form_people = $hh['people'];
+                $hh_form_homes = View::storage()->homes_you_organise( $hh_user );
+                $hh_form_shut = $hh_shut;
+                $hh_form_open = $hh_adding || $hh_form_task;
+                require __DIR__ . '/_task-form.php';
+                ?>
             <?php endif; ?>
 
             <ul class="plain">
@@ -131,7 +157,6 @@ $hh_quiet = $hh_sifted['quiet'];
                 <?php
                 $hh_task_home = $hh_home_id;
                 $hh_task_url = $hh_url;
-                $hh_task_people = $hh['people'];
                 $hh_task_writing = $hh_writing;
                 $hh_task_editing = $hh_editing;
                 ?>
@@ -146,31 +171,43 @@ $hh_quiet = $hh_sifted['quiet'];
             <div class="row heading">
                 <h2><?php echo esc_html__( 'About this household', 'households' ); ?></h2>
                 <?php if ( $hh_writing ) : ?>
-                    <details class="add">
-                        <summary><?php echo esc_html__( '+ Add', 'households' ); ?></summary>
-                        <form method="post" class="grid">
-                            <?php View::fields( 'add_note', [ 'kind' => 'fact' ] ); ?>
-                            <label><?php echo esc_html__( 'Label', 'households' ); ?><input type="text" name="title" required></label>
-                            <label class="wide"><?php echo esc_html__( 'Detail', 'households' ); ?><input type="text" name="detail"></label>
-                            <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-                        </form>
-                    </details>
+                    <?php // The same pill the list of things to do has, over a form of the same shape: a note about the house is written down the way anything else here is. ?>
+                    <a class="pill" href="<?php echo esc_url( $hh_fact_showing ? $hh_shut : $hh_fact_new ); ?>"
+                        aria-controls="fact" aria-expanded="<?php echo $hh_fact_showing ? 'true' : 'false'; ?>"
+                        aria-label="<?php echo esc_attr__( 'Write something down about this household', 'households' ); ?>"><?php echo $hh_fact_showing ? '&times;' : '+'; ?></a>
                 <?php elseif ( ! $hh['facts'] ) : ?>
                     <span class="meta"><?php echo esc_html__( 'Nothing written down yet.', 'households' ); ?></span>
                 <?php endif; ?>
             </div>
+            <?php if ( $hh_writing ) : ?>
+                <?php
+                $hh_fact_shut = $hh_shut;
+                $hh_fact_open = $hh_fact_showing;
+                require __DIR__ . '/_fact-form.php';
+                ?>
+            <?php endif; ?>
             <ul class="plain">
                 <?php foreach ( $hh['facts'] as $hh_note ) : ?>
+                    <?php $hh_note_is_open = $hh_writing && (string) $hh_note['id'] === $hh_facting; ?>
                     <li class="row">
                         <div class="grow">
                             <strong><?php echo esc_html( $hh_note['title'] ); ?></strong>
-                            <div class="meta"><?php echo esc_html( $hh_note['detail'] ); ?></div>
+                            <?php if ( '' !== trim( (string) $hh_note['detail'] ) ) : ?>
+                                <?php // A note is prose, and reads as it was typed. ?>
+                                <p class="note" style="margin:2px 0 0"><?php echo esc_html( $hh_note['detail'] ); ?></p>
+                            <?php endif; ?>
                         </div>
                         <?php if ( $hh_writing ) : ?>
-                            <form method="post">
-                                <?php View::fields( 'remove_note', [ 'kind' => 'fact', 'note_id' => $hh_note['id'] ] ); ?>
-                                <button type="submit" class="quiet"><?php echo esc_html__( 'Remove', 'households' ); ?></button>
-                            </form>
+                            <div class="actions">
+                                <?php // Waiting to be pointed at, like the rows above: the form it opens is the one over the list, and pressing it again is the way back out. ?>
+                                <a class="pill onhover<?php echo $hh_note_is_open ? ' on' : ''; ?>"
+                                    href="<?php echo esc_url( $hh_note_is_open ? $hh_shut : add_query_arg( 'fact', $hh_note['id'], $hh_shut ) ); ?>"
+                                    aria-label="<?php echo esc_attr( sprintf(
+                                        /* translators: %s: what a note is labelled. */
+                                        __( 'Edit “%s”', 'households' ),
+                                        $hh_note['title']
+                                    ) ); ?>"><?php echo esc_html__( 'edit', 'households' ); ?></a>
+                            </div>
                         <?php endif; ?>
                     </li>
                 <?php endforeach; ?>
@@ -181,7 +218,8 @@ $hh_quiet = $hh_sifted['quiet'];
         <?php // Ticking something off the packing is a tick like any other, so the section it is in comes back from the server rather than the page going away and returning. ?>
         <section id="hh-things" data-hh-live-section>
             <div class="row heading">
-                <h2><?php echo esc_html__( 'Things kept here', 'households' ); ?></h2>
+                <?php // The heading is the way on: what is here is one house's worth of everything kept across them all. ?>
+                <h2><a href="<?php echo esc_url( View::base() . 'things/' ); ?>"><?php echo esc_html__( 'Things that are here', 'households' ); ?></a></h2>
                 <?php if ( $hh_writing ) : ?>
                     <details class="add">
                         <summary><?php echo esc_html__( '+ Add', 'households' ); ?></summary>
@@ -192,15 +230,21 @@ $hh_quiet = $hh_sifted['quiet'];
                             <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
                         </form>
                     </details>
-                <?php elseif ( ! $hh['items'] ) : ?>
-                    <span class="meta"><?php echo esc_html__( 'Nothing listed yet.', 'households' ); ?></span>
+                <?php elseif ( ! $hh_here_now ) : ?>
+                    <span class="meta">
+                        <?php
+                        echo $hh['items']
+                            ? esc_html__( 'Everything kept here is somewhere else just now.', 'households' )
+                            : esc_html__( 'Nothing listed yet.', 'households' );
+                        ?>
+                    </span>
                 <?php endif; ?>
             </div>
             <?php require __DIR__ . '/_undone.php'; ?>
             <?php // The same line the things pages print, because a thing reads the same wherever it is listed: where it lives, who else keeps it, where it has got to, and where it is to go. The heading has said which household this is. ?>
             <ul class="plain">
                 <?php $hh_homes = $hh['homes']; ?>
-                <?php foreach ( $hh['items'] as $hh_thing ) : ?>
+                <?php foreach ( $hh_here_now as $hh_thing ) : ?>
                     <?php
                     $hh_thing_home = $hh['home']['id'];
                     $hh_thing_at_said = true;

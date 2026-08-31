@@ -21,9 +21,32 @@ $hh_homes = View::storage()->get_homes_for_user( $hh_user );
 
 // Read house by house, or as one list of everything there is. Which of the two
 // is in the URL, so it survives a move and can be passed to somebody else.
-// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+// phpcs:disable WordPress.Security.NonceVerification.Recommended
 $hh_flat = ! empty( $_GET['flat'] );
+// And whether the form for a new one is open, which is a page you can be sent
+// and reload into, as it is on the pages with a list to do.
+$hh_adding = ! empty( $_GET['add'] );
+// phpcs:enable WordPress.Security.NonceVerification.Recommended
 $hh_url = remove_query_arg( 'problem' );
+$hh_shut = remove_query_arg( 'add', $hh_url );
+$hh_open = add_query_arg( 'add', 1, $hh_shut );
+
+// How the list is read: as one list, or gathered under the house each thing is
+// at. Both are named and one of them is where you are, so the question and its
+// two answers are on the page rather than a word that has to be read as a
+// button.
+$hh_grouped_by = [
+    [
+        'label' => __( 'none', 'households' ),
+        'url'   => add_query_arg( 'flat', 1, $hh_url ),
+        'here'  => $hh_flat,
+    ],
+    [
+        'label' => __( 'household', 'households' ),
+        'url'   => remove_query_arg( 'flat', $hh_url ),
+        'here'  => ! $hh_flat,
+    ],
+];
 
 // Grouped, the household is a heading and every thing under it says where in
 // that house it lives, because the heading already said which house. Which
@@ -71,46 +94,57 @@ require __DIR__ . '/_head.php';
         <p class="subtitle"><?php echo esc_html__( 'Everything kept across the households you belong to, and which one it is at.', 'households' ); ?></p>
         <?php View::notice(); ?>
 
-        <section id="hh-things" data-hh-live-section>
-            <div class="row heading">
-                <h2><?php echo esc_html__( 'Everything kept', 'households' ); ?></h2>
-                <div class="actions">
-                    <a class="pill<?php echo $hh_flat ? '' : ' on'; ?>"
-                        href="<?php echo esc_url( $hh_flat ? remove_query_arg( 'flat', $hh_url ) : add_query_arg( 'flat', 1, $hh_url ) ); ?>">
-                        <?php echo esc_html__( 'by household', 'households' ); ?>
-                    </a>
-                    <?php if ( $hh_writable ) : ?>
-                    <details class="add">
-                        <summary><?php echo esc_html__( '+ Add', 'households' ); ?></summary>
-                        <form method="post" class="grid">
-                            <?php View::fields( 'add_note', [ 'kind' => 'item' ] ); ?>
-                            <label><?php echo esc_html__( 'Thing', 'households' ); ?>
-                                <input type="text" name="title" required>
-                            </label>
-                            <label><?php echo esc_html__( 'Where it lives', 'households' ); ?>
-                                <input type="text" name="detail">
-                            </label>
-                            <?php // One household to keep it in is not a question; the form says which it is and asks nothing. ?>
-                            <?php if ( count( $hh_writable ) > 1 ) : ?>
-                                <label><?php echo esc_html__( 'At which household', 'households' ); ?>
-                                    <select name="home_id">
-                                        <?php foreach ( $hh_writable as $hh_home ) : ?>
-                                            <option value="<?php echo (int) $hh_home['id']; ?>" <?php selected( $hh_home['id'], $hh_default_home ); ?>>
-                                                <?php echo esc_html( $hh_home['name'] ); ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </label>
-                            <?php else : ?>
-                                <input type="hidden" name="home_id" value="<?php echo (int) $hh_writable[0]['id']; ?>">
-                            <?php endif; ?>
-                            <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-                        </form>
-                    </details>
+        <?php // What can be done to this page — read it house by house, or add something to it — is the page's own rather than the list's, so it stays put while the list comes and goes. ?>
+        <div class="actions" style="margin-bottom:12px">
+            <span class="choose">
+                <span class="meta"><?php echo esc_html__( 'Group by', 'households' ); ?></span>
+                <?php foreach ( $hh_grouped_by as $hh_by ) : ?>
+                    <?php if ( $hh_by['here'] ) : ?>
+                        <strong aria-current="true"><?php echo esc_html( $hh_by['label'] ); ?></strong>
+                    <?php else : ?>
+                        <a href="<?php echo esc_url( $hh_by['url'] ); ?>"><?php echo esc_html( $hh_by['label'] ); ?></a>
                     <?php endif; ?>
-                </div>
-            </div>
+                <?php endforeach; ?>
+            </span>
+            <?php if ( $hh_writable ) : ?>
+                <?php // The way in to the form is a press on this line and stays on it, whether the form is open or shut: the form itself is under the line, where it has the width to be a form. ?>
+                <a class="pill" style="margin-left:auto" href="<?php echo esc_url( $hh_adding ? $hh_shut : $hh_open ); ?>"
+                    aria-controls="add" aria-expanded="<?php echo $hh_adding ? 'true' : 'false'; ?>"
+                    aria-label="<?php echo esc_attr__( 'Add a thing', 'households' ); ?>"><?php echo $hh_adding ? '&times;' : '+'; ?></a>
+            <?php endif; ?>
+        </div>
 
+        <?php if ( $hh_writable ) : ?>
+            <form method="post" class="grid" id="add" action="<?php echo esc_url( $hh_url ); ?>" style="margin-bottom:12px" <?php echo $hh_adding ? '' : 'hidden'; ?>>
+                <?php View::fields( 'add_note', [ 'kind' => 'item' ] ); ?>
+                <label><?php echo esc_html__( 'Thing', 'households' ); ?>
+                    <input type="text" name="title" required <?php echo $hh_adding ? 'autofocus' : ''; ?>>
+                </label>
+                <label><?php echo esc_html__( 'Where it lives', 'households' ); ?>
+                    <input type="text" name="detail">
+                </label>
+                <?php // One household to keep it in is not a question; the form says which it is and asks nothing. ?>
+                <?php if ( count( $hh_writable ) > 1 ) : ?>
+                    <label><?php echo esc_html__( 'At which household', 'households' ); ?>
+                        <select name="home_id">
+                            <?php foreach ( $hh_writable as $hh_home ) : ?>
+                                <option value="<?php echo (int) $hh_home['id']; ?>" <?php selected( $hh_home['id'], $hh_default_home ); ?>>
+                                    <?php echo esc_html( $hh_home['name'] ); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                <?php else : ?>
+                    <input type="hidden" name="home_id" value="<?php echo (int) $hh_writable[0]['id']; ?>">
+                <?php endif; ?>
+                <div class="actions wide">
+                    <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
+                    <a class="button quiet" href="<?php echo esc_url( $hh_shut ); ?>"><?php echo esc_html__( 'Cancel', 'households' ); ?></a>
+                </div>
+            </form>
+        <?php endif; ?>
+
+        <section id="hh-things" data-hh-live-section>
             <?php require __DIR__ . '/_undone.php'; ?>
 
             <?php if ( ! $hh_things ) : ?>
@@ -130,7 +164,7 @@ require __DIR__ . '/_head.php';
                 </ul>
             <?php else : ?>
                 <?php foreach ( $hh_groups as $hh_group_id => $hh_group ) : ?>
-                    <h3 style="margin:14px 0 6px;font-size:0.95rem">
+		    <h3>
                         <a href="<?php echo esc_url( View::home_url( $hh_group_id ) ); ?>"><?php echo esc_html( $hh_group['name'] ); ?></a>
                     </h3>
                     <ul class="plain">

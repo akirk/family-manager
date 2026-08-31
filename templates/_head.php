@@ -102,8 +102,8 @@ $hh_title = isset( $hh_title ) && '' !== trim( $hh_title ) ? $hh_title : __( 'Ho
         details.add > form { margin-top: 10px; }
         /* Sitting in a section's own line it keeps to the right, and opening it
            takes the whole width of that line rather than a corner of it. */
-        .row.heading details.add { margin-top: 0; }
-        .row.heading details.add[open] { flex: 1 1 100%; }
+        .row.heading details.add, .actions details.add { margin-top: 0; }
+        .row.heading details.add[open], .actions details.add[open] { flex: 1 1 100%; }
         /* Beside other controls it is the whole group that gives up the line. */
         .row.heading .actions:has(details.add[open]) { flex: 1 1 100%; }
         ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
@@ -112,9 +112,14 @@ $hh_title = isset( $hh_title ) && '' !== trim( $hh_title ) ? $hh_title : __( 'Ho
         .pill { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px; background: color-mix(in srgb, var(--hh-accent) 12%, transparent); color: var(--hh-accent-strong); font-size: 0.76rem; font-weight: 700; white-space: nowrap; }
         .pill.warm { background: color-mix(in srgb, var(--hh-warm) 16%, transparent); color: var(--hh-warm); }
         .empty { color: var(--hh-muted); border: 1px dashed var(--hh-line); border-radius: 6px; padding: 16px; text-align: center; }
+        /* A question with its answers beside it: the one you are reading is
+           said rather than offered, so there is nothing to press that would
+           leave you where you already are. */
+        .choose { display: inline-flex; align-items: baseline; gap: 8px; font-size: 0.9rem; }
+        .choose .meta::after { content: ":"; }
         button, .button { min-height: 38px; padding: 0 12px; border: 1px solid var(--hh-accent-strong); border-radius: 6px; background: transparent; color: var(--hh-accent-strong); font: inherit; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
-        button.primary { background: var(--hh-accent); border-color: var(--hh-accent); color: #fff; }
-        button.quiet { border-color: var(--hh-line); color: var(--hh-muted); font-weight: 400; }
+        button.primary, .button.primary { background: var(--hh-accent); border-color: var(--hh-accent); color: #fff; }
+        button.quiet, .button.quiet { border-color: var(--hh-line); color: var(--hh-muted); font-weight: 400; }
         input, select, textarea { min-height: 38px; width: 100%; padding: 6px 10px; border: 1px solid var(--hh-line); border-radius: 6px; background: var(--hh-bg); color: var(--hh-text); font: inherit; }
         textarea { min-height: 140px; resize: vertical; line-height: 1.6; }
         label { display: grid; gap: 4px; font-size: 0.9rem; font-weight: 700; }

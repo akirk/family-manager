@@ -120,6 +120,21 @@ class Storage {
         return array_values( $homes );
     }
 
+    /**
+     * The homes this user may write in, which is where a task can be put and
+     * where one already written down can be moved to.
+     *
+     * @return array[] named and ordered as the households list is.
+     */
+    public function homes_you_organise( int $user_id ): array {
+        return array_values( array_filter(
+            $this->get_homes_for_user( $user_id ),
+            static function( array $home ) use ( $user_id ): bool {
+                return Access::can_organise( $user_id, $home['id'] );
+            }
+        ) );
+    }
+
     /** @return array[] the homes this person belongs to, named and ordered. */
     public function get_homes_for_person( int $person_id ): array {
         $homes = array_filter( array_map( [ $this, 'get_home' ], Access::home_ids_for_person( $person_id ) ) );
@@ -218,7 +233,7 @@ class Storage {
             return 0;
         }
 
-        $person_id = (int) wp_insert_post( [
+        $person_id = $this->write_post( [
             'post_author' => 0,
             'post_status' => 'private',
             'post_title'  => $name,
@@ -289,15 +304,15 @@ class Storage {
             return;
         }
         if ( array_key_exists( 'name', $fields ) && '' !== trim( (string) $fields['name'] ) ) {
-            wp_update_post( [
+            $this->write_post( [
                 'ID'         => $person_id,
                 'post_title' => sanitize_text_field( (string) $fields['name'] ),
             ] );
         }
         if ( array_key_exists( 'about', $fields ) ) {
-            wp_update_post( [
+            $this->write_post( [
                 'ID'           => $person_id,
-                'post_content' => wp_kses_post( (string) $fields['about'] ),
+                'post_content' => sanitize_textarea_field( (string) $fields['about'] ),
             ] );
         }
         if ( array_key_exists( 'label', $fields ) ) {
@@ -404,8 +419,8 @@ class Storage {
             return 0;
         }
         $item = self::ITEM === $post_type;
-        $post_id = (int) wp_insert_post( [
-            'post_content' => $item ? '' : wp_kses_post( $detail ),
+        $post_id = $this->write_post( [
+            'post_content' => $item ? '' : sanitize_textarea_field( $detail ),
             'post_status'  => 'private',
             'post_title'   => $title,
             'post_type'    => $post_type,
@@ -435,13 +450,13 @@ class Storage {
             if ( self::ITEM === $post_type ) {
                 $this->set_where( $post_id, $home_id, $detail );
             } else {
-                $fields['post_content'] = wp_kses_post( $detail );
+                $fields['post_content'] = sanitize_textarea_field( $detail );
             }
         }
         if ( null !== $note ) {
-            $fields['post_excerpt'] = wp_kses_post( $note );
+            $fields['post_excerpt'] = sanitize_textarea_field( $note );
         }
-        wp_update_post( $fields );
+        $this->write_post( $fields );
         return true;
     }
 
@@ -494,7 +509,7 @@ class Storage {
                 $kept[ $was ] = $said;
             }
         }
-        $kept[ $home_id ] = wp_kses_post( $where );
+        $kept[ $home_id ] = sanitize_text_field( $where );
         update_post_meta( $post_id, self::META_WHERE, $kept );
     }
 
@@ -540,7 +555,7 @@ class Storage {
         if ( ! $revision || (int) $revision->post_parent !== $post_id ) {
             return false;
         }
-        wp_update_post( [
+        $this->write_post( [
             'ID'           => $post_id,
             'post_excerpt' => $revision->post_excerpt,
         ] );
@@ -1255,7 +1270,7 @@ class Storage {
         if ( $person_id && ! Access::is_member( $person_id, $home_id ) ) {
             $person_id = 0;
         }
-        $task_id = (int) wp_insert_post( [
+        $task_id = $this->write_post( [
             'post_parent' => $person_id,
             'post_status' => 'private',
             'post_title'  => $title,
@@ -1275,7 +1290,7 @@ class Storage {
      * left blank is blank on purpose: the form says all of it every time, so a
      * date taken off is a date taken off rather than a field not mentioned.
      */
-    public function edit_task( int $home_id, int $task_id, string $title, int $person_id = 0, string $task_type = 'task', string $due_date = '' ): bool {
+    public function edit_task( int $home_id, int $task_id, string $title, int $person_id = 0, string $task_type = 'task', string $due_date = '', int $to_home_id = 0 ): bool {
         $post = get_post( $task_id );
         if ( ! $post || self::TASK !== $post->post_type || ! in_array( $home_id, $this->home_ids_of_post( $task_id ), true ) ) {
             return false;
@@ -1284,10 +1299,20 @@ class Storage {
         if ( '' === trim( $title ) ) {
             return false;
         }
-        if ( $person_id && ! Access::is_member( $person_id, $home_id ) ) {
+        // Which household it is in is one of the answers, so a task written
+        // down in the wrong house is put right the same way a misspelt one is.
+        // Everything else is then true of the house it has moved to: whoever it
+        // is for has to be somebody there, and nobody is who it is for
+        // otherwise.
+        $moved = $to_home_id && $to_home_id !== $home_id && $this->get_home( $to_home_id ) ? $to_home_id : 0;
+        $lives_in = $moved ?: $home_id;
+        if ( $person_id && ! Access::is_member( $person_id, $lives_in ) ) {
             $person_id = 0;
         }
-        wp_update_post( [
+        if ( $moved ) {
+            wp_set_object_terms( $task_id, [ $moved ], Access::TAXONOMY );
+        }
+        $this->write_post( [
             'ID'          => $task_id,
             'post_parent' => $person_id,
             'post_title'  => $title,
@@ -1313,6 +1338,11 @@ class Storage {
                 'title'     => $post->post_title,
                 'person_id' => $person_id,
                 'person'    => $person ? $person->post_title : '',
+                // Who wrote it down and when. A household list is written by
+                // several hands, and the answer to "who asked for this?" is
+                // worth having without a word of it on the line.
+                'added_by'  => $this->who_wrote( (int) $post->post_author ),
+                'added_at'  => $post->post_date,
                 'task_type' => get_post_meta( $post->ID, self::META_TASK_TYPE, true ) ?: 'task',
                 'due_date'  => (string) get_post_meta( $post->ID, self::META_DUE_DATE, true ),
                 // When it was ticked off, so a list can keep the recent ones
@@ -1333,6 +1363,61 @@ class Storage {
             return strcmp( $a['due_date'] ?: '9999-12-31', $b['due_date'] ?: '9999-12-31' );
         } );
         return $tasks;
+    }
+
+    /**
+     * Write one of ours, keeping what was typed as it was typed.
+     *
+     * Everything this app stores is plain text: it goes onto the page through
+     * esc_html, so nothing in it is markup, and it is made safe on the way in
+     * by having any tags taken out of it. WordPress guards a post differently
+     * — for anybody without the run of the whole site it turns "&" into
+     * "&amp;" as it is stored — which is right for a post that is HTML and
+     * wrong for a line somebody typed: they wrote an ampersand and want to
+     * read one back, not the name of one. So that guard is held off while ours
+     * does the work, and put back exactly where it was found.
+     *
+     * @return int the post written, or 0.
+     */
+    private function write_post( array $fields ): int {
+        $held = [];
+        $guards = [
+            'content_save_pre'          => 'wp_filter_post_kses',
+            'content_filtered_save_pre' => 'wp_filter_post_kses',
+            'excerpt_save_pre'          => 'wp_filter_post_kses',
+            'title_save_pre'            => 'wp_filter_kses',
+        ];
+        foreach ( $guards as $hook => $guard ) {
+            $at = has_filter( $hook, $guard );
+            if ( false !== $at ) {
+                remove_filter( $hook, $guard, $at );
+                $held[ $hook ] = [ $guard, $at ];
+            }
+        }
+        $written = empty( $fields['ID'] )
+            ? (int) wp_insert_post( $fields )
+            : (int) wp_update_post( $fields );
+        foreach ( $held as $hook => $guard ) {
+            add_filter( $hook, $guard[0], $guard[1] );
+        }
+        return $written;
+    }
+
+    /**
+     * The person behind an account, said as the app says people: by the name
+     * the household knows them by. An account with nobody's page attached is
+     * whoever WordPress says they are, and no account at all is nobody.
+     */
+    private function who_wrote( int $user_id ): string {
+        if ( ! $user_id ) {
+            return '';
+        }
+        $person = get_post( Access::person_for_user( $user_id ) );
+        if ( $person ) {
+            return $person->post_title;
+        }
+        $user = get_userdata( $user_id );
+        return $user ? $user->display_name : '';
     }
 
     public function toggle_task( int $home_id, int $task_id ): bool {

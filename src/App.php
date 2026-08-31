@@ -586,10 +586,14 @@ class App extends BaseApp {
                 break;
 
             case 'add_task':
-                if ( ! $can_organise ) {
+                // Which household it is for is one of the answers the form
+                // asks, so it can be a house other than the page it is asked
+                // on — and writing in that one is what it takes.
+                $into = $post( 'to_home_id', 'int' ) ?: $home_id;
+                if ( ! $can_organise || ! current_user_can( 'organise_household', $into ) ) {
                     return $this->refuse();
                 }
-                $this->storage->add_task( $home_id, $post( 'title' ), $post( 'person_id', 'int' ), $post( 'task_type', 'key' ) ?: 'task', $post( 'due_date' ) );
+                $this->storage->add_task( $into, $post( 'title' ), $post( 'person_id', 'int' ), $post( 'task_type', 'key' ) ?: 'task', $post( 'due_date' ) );
                 break;
 
             case 'toggle_task':
@@ -606,8 +610,11 @@ class App extends BaseApp {
 
             case 'edit_task':
                 // Writing a task is the same permission as writing it down in
-                // the first place, and about the same four answers.
-                if ( ! $can_organise ) {
+                // the first place, and about the same answers — one of which is
+                // which household it is in. Moving it is writing in both: the
+                // one it is leaving and the one it is going to.
+                $moves_to = $post( 'to_home_id', 'int' ) ?: $home_id;
+                if ( ! $can_organise || ! current_user_can( 'organise_household', $moves_to ) ) {
                     return $this->refuse();
                 }
                 $this->storage->edit_task(
@@ -616,7 +623,8 @@ class App extends BaseApp {
                     $post( 'title' ),
                     $post( 'person_id', 'int' ),
                     $post( 'task_type', 'key' ) ?: 'task',
-                    $post( 'due_date' )
+                    $post( 'due_date' ),
+                    $moves_to
                 );
                 break;
 
