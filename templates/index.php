@@ -36,6 +36,8 @@ foreach ( isset( $hh_here['tasks'] ) ? $hh_here['tasks'] : [] as $hh_task ) {
     $hh_tasks[] = $hh_task;
 }
 $hh_can_add = ! empty( $hh_here['viewer']['can_organise'] );
+$hh_open = add_query_arg( 'add', 1, $hh_url );
+$hh_close = remove_query_arg( 'add', $hh_url );
 
 $hh_title = __( 'Overview', 'households' );
 
@@ -57,7 +59,7 @@ require __DIR__ . '/_head.php';
 
         <div class="columns">
             <div>
-                <section>
+                <section id="hh-todo">
                     <div class="row heading">
                         <h2>
                             <?php
@@ -78,18 +80,21 @@ require __DIR__ . '/_head.php';
                                     <?php echo esc_html__( 'just mine', 'households' ); ?>
                                 </a>
                                 <?php if ( $hh_can_add ) : ?>
-                                    <a class="pill" href="<?php echo esc_url( $hh_adding ? remove_query_arg( 'add', $hh_url ) : add_query_arg( 'add', 1, $hh_url ) . '#add' ); ?>"
+                                    <?php // A link that asks the page for the form; the script opens the one already here instead. ?>
+                                    <a class="pill" data-hh-add href="<?php echo esc_url( $hh_adding ? $hh_close : $hh_open ); ?>"
+                                        data-hh-open="<?php echo esc_url( $hh_open ); ?>" data-hh-close="<?php echo esc_url( $hh_close ); ?>"
+                                        aria-controls="add" aria-expanded="<?php echo $hh_adding ? 'true' : 'false'; ?>"
                                         aria-label="<?php echo esc_attr__( 'Write something down', 'households' ); ?>"><?php echo $hh_adding ? '&times;' : '+'; ?></a>
                                 <?php endif; ?>
                             </div>
                         <?php endif; ?>
                     </div>
 
-                    <?php if ( $hh_adding && $hh_can_add ) : ?>
-                        <form method="post" class="grid" id="add" style="margin-bottom:12px">
+                    <?php if ( $hh_can_add ) : ?>
+                        <form method="post" class="grid" id="add" style="margin-bottom:12px" <?php echo $hh_adding ? '' : 'hidden'; ?>>
                             <?php View::fields( 'add_task', [ 'home_id' => $hh_where['home_id'] ] ); ?>
                             <label class="wide"><?php echo esc_html__( 'What needs doing', 'households' ); ?>
-                                <input type="text" name="title" required autofocus>
+                                <input type="text" name="title" required <?php echo $hh_adding ? 'autofocus' : ''; ?>>
                             </label>
                             <label><?php echo esc_html__( 'For whom', 'households' ); ?>
                                 <select name="person_id">
@@ -230,7 +235,7 @@ require __DIR__ . '/_head.php';
                     </ul>
                 </section>
 
-                <section>
+                <section id="hh-agenda">
                     <h2><a href="<?php echo esc_url( View::base() . 'where/' ); ?>"><?php echo esc_html__( 'Who is where', 'households' ); ?></a></h2>
                     <ul class="plain">
                         <?php if ( ! $hh_day['agenda'] ) : ?>
@@ -290,4 +295,95 @@ require __DIR__ . '/_head.php';
             </div>
         </div>
         <?php endif; ?>
+
+<?php if ( $hh_homes ) : ?>
+<script>
+/*
+ * The list already works without this. The + is a link asking for the page with
+ * the form open, ticking something is a form, and writing something down posts
+ * and comes back to a page read afresh. All the script does is spare the page
+ * going away and coming back: the form is already here, so opening it is a
+ * class rather than a request, and everything posted is posted to the same URL
+ * with the sections the server rendered in reply put back in. Nothing is worked
+ * out here that the server has not worked out already.
+ */
+( function () {
+    var live = [ 'hh-todo', 'hh-agenda' ];
+    if ( ! document.getElementById( 'hh-todo' ) || ! window.fetch || ! window.DOMParser || ! window.FormData ) {
+        return;
+    }
+
+    function swap( html ) {
+        var fresh = new DOMParser().parseFromString( html, 'text/html' );
+        live.forEach( function ( id ) {
+            var here = document.getElementById( id );
+            var came = fresh.getElementById( id );
+            if ( here && came ) {
+                here.replaceWith( came );
+            }
+        } );
+    }
+
+    function load( form ) {
+        var busy = document.getElementById( 'hh-todo' );
+        busy.setAttribute( 'aria-busy', 'true' );
+        fetch( window.location.href, { method: 'POST', body: new FormData( form ), credentials: 'same-origin' } )
+            .then( function ( response ) {
+                if ( ! response.ok ) {
+                    throw new Error( String( response.status ) );
+                }
+                return response.text();
+            } )
+            .then( function ( html ) {
+                swap( html );
+                // Written down and gone from the fields: the next one is
+                // expected, so the cursor is left where it was.
+                var again = document.querySelector( '#hh-todo form#add:not([hidden]) input[name="title"]' );
+                if ( again ) {
+                    again.focus();
+                }
+            } )
+            // Anything unexpected hands the page back to the browser, which has
+            // known how to do this all along.
+            .catch( function () {
+                form.submit();
+            } );
+    }
+
+    // Listening is done once, from outside what gets exchanged, so no amount of
+    // swapping can leave a form posting twice or a link doing nothing.
+    document.addEventListener( 'submit', function ( event ) {
+        var form = event.target.closest( '#hh-todo form' );
+        if ( ! form ) {
+            return;
+        }
+        event.preventDefault();
+        load( form );
+    } );
+
+    document.addEventListener( 'click', function ( event ) {
+        var link = event.target.closest( '#hh-todo a[data-hh-add]' );
+        var form = document.getElementById( 'add' );
+        if ( ! link || ! form ) {
+            return;
+        }
+        event.preventDefault();
+        var opening = form.hidden;
+        form.hidden = ! opening;
+        link.textContent = opening ? '\u00d7' : '+';
+        link.setAttribute( 'aria-expanded', opening ? 'true' : 'false' );
+        // Whether the form is open is kept in the URL, so a reload leaves it as
+        // it was and the link keeps pointing at the state it is not in.
+        window.history.replaceState( {}, '', opening ? link.getAttribute( 'data-hh-open' ) : link.getAttribute( 'data-hh-close' ) );
+        link.href = opening ? link.getAttribute( 'data-hh-close' ) : link.getAttribute( 'data-hh-open' );
+        if ( opening ) {
+            var title = form.querySelector( 'input[name="title"]' );
+            if ( title ) {
+                title.focus();
+            }
+        }
+    } );
+}() );
+</script>
+<?php endif; ?>
 <?php require __DIR__ . '/_foot.php'; ?>
