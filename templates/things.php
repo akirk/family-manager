@@ -53,7 +53,7 @@ require __DIR__ . '/_head.php';
         <p class="subtitle"><?php echo esc_html__( 'Everything kept across the households you belong to, and which one it is at.', 'households' ); ?></p>
         <?php View::notice(); ?>
 
-        <section>
+        <section id="hh-things" data-hh-live-section>
             <div class="row heading">
                 <h2><?php echo esc_html__( 'Everything kept', 'households' ); ?></h2>
                 <div class="actions">
@@ -93,6 +93,8 @@ require __DIR__ . '/_head.php';
                 </div>
             </div>
 
+            <?php require __DIR__ . '/_undone.php'; ?>
+
             <?php if ( ! $hh_things ) : ?>
                 <ul class="plain">
                     <li class="empty"><?php echo esc_html__( 'Nothing listed in any of your households yet.', 'households' ); ?></li>
@@ -127,4 +129,5 @@ require __DIR__ . '/_head.php';
             <?php endif; ?>
 
         </section>
+<?php require __DIR__ . '/_todo-script.php'; ?>
 <?php require __DIR__ . '/_foot.php'; ?>

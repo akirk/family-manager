@@ -330,11 +330,15 @@ class App extends BaseApp {
         $this->go_back( $outcome['problem'], $outcome['to'] );
     }
 
+    /** The page the form was on, as it was asked for. */
+    private function here(): string {
+        return isset( $_SERVER['REQUEST_URI'] ) ? esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '/';
+    }
+
     /** Back where the form was, with anything that went wrong named in the URL. */
     private function go_back( string $problem = '', string $to = '' ): void {
         if ( '' === $to ) {
-            $here = isset( $_SERVER['REQUEST_URI'] ) ? esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '/';
-            $to = remove_query_arg( 'problem', $here );
+            $to = remove_query_arg( 'problem', $this->here() );
         }
         if ( '' !== $problem ) {
             $to = add_query_arg( 'problem', $problem, $to );
@@ -658,12 +662,27 @@ class App extends BaseApp {
             // any post ID would do to put anything in a house of theirs.
             //
             // Things only: a fact is true of one house, and a house that is not
-            // being told anything is not one to add it to.
+            // being told anything is not one to add it to. It is said once for the trip
+            // A bag that has been carried. It is said once for the trip rather
+            // than once for every thing in it, because carrying it is one
+            // thing somebody did: everything ticked off is now at the
+            // household it was going to, and off the list. What was not packed
+            // was not taken, so it stays where it is and stays on the list for
+            // the next trip that way. Each thing in it is still one the viewer
+            // must be able to open, which is asked of them one by one.
+            case 'things_arrived':
+                if ( ! $can_organise ) {
+                    return $this->refuse();
+                }
+                $this->storage->things_arrived( $user_id, $post( 'from_home_id', 'int' ), $home_id );
+                break;
+
             case 'keep_note_at':
             case 'drop_note_at':
             case 'note_is_at':
             case 'note_goes_to':
             case 'note_not_going':
+            case 'toggle_packed':
                 $kind = $this->note_type( $post( 'kind', 'key' ) );
                 $note_id = $post( 'note_id', 'int' );
                 if ( Storage::ITEM !== $kind || ! $can_organise || ! $this->storage->may_reach_note( $user_id, $note_id, $kind ) ) {
@@ -686,11 +705,26 @@ class App extends BaseApp {
                 // saying it, because it is the same sentence taken back.
                 if ( 'note_goes_to' === $action ) {
                     $this->storage->say_note_goes_to( $home_id, $kind, $note_id );
+                    // Put back, so the offer to put it back goes with it.
+                    return $this->done( remove_query_arg( [ 'problem', 'undo', 'undo_to' ], $this->here() ) );
+                }
+                // Ticked off the packlist, or the tick taken back. Which of
+                // the two it is is what the mark says, not what the form does,
+                // so the same box answers for both.
+                if ( 'toggle_packed' === $action ) {
+                    $this->storage->toggle_packed( $home_id, $kind, $note_id );
                     break;
                 }
                 if ( 'note_not_going' === $action ) {
                     $this->storage->say_note_is_not_going( $kind, $note_id );
-                    break;
+                    // Taken off a list by a cross, which is easy to mean and
+                    // easy to miss by. What was taken off is named in the URL
+                    // so the page can offer it back, and offering it back is
+                    // the same sentence that put it there in the first place.
+                    return $this->done( add_query_arg(
+                        [ 'undo' => $note_id, 'undo_to' => $home_id ],
+                        remove_query_arg( [ 'problem', 'undo', 'undo_to' ], $this->here() )
+                    ) );
                 }
                 $this->storage->drop_note_at( $home_id, $kind, $note_id );
                 // Dropped the last household of yours that kept it, and the

@@ -189,14 +189,52 @@ require __DIR__ . '/_head.php';
                         <?php elseif ( ! $hh_here['items'] ) : ?>
                             <li class="empty"><?php echo esc_html__( 'Nothing listed here yet.', 'households' ); ?></li>
                         <?php endif; ?>
-                        <?php // The same line the things pages print, read rather than written: this is the shelf, and what is to be said about a thing is said where things are kept. A thing that lives here but has gone somewhere else says so, because the drawer it lives in is no help today. ?>
                         <?php foreach ( isset( $hh_here['items'] ) ? $hh_here['items'] : [] as $hh_thing ) : ?>
                             <?php
-                            $hh_thing_home = $hh_here['home']['id'];
-                            $hh_thing_writing = false;
-                            $hh_thing_going_said = false;
+                            // The shelf you can actually reach, so a thing that
+                            // lives here but has gone somewhere else says so:
+                            // the drawer it lives in is no help today.
+                            $hh_thing_at = ! empty( $hh_thing['at'] ) ? $hh_thing['at'] : [];
+                            $hh_thing_away = ! empty( $hh_thing_at['home_id'] ) && $hh_thing_at['home_id'] !== $hh_here['home']['id'];
+                            // And a shelf you are about to leave is one to
+                            // take things off: what is still to go in the bag
+                            // is worth saying here, and so is what is already
+                            // in it, because it is still on this shelf.
+                            $hh_thing_goes = ! empty( $hh_thing['going'] ) ? $hh_thing['going'] : [];
+                            $hh_thing_goes_named = ! empty( $hh_thing_goes['home_id'] ) && Access::can_reach( $hh_user, $hh_thing_goes['home_id'] );
                             ?>
-                            <?php require __DIR__ . '/_thing.php'; ?>
+                            <li class="row">
+                                <div class="grow">
+                                    <strong><a href="<?php echo esc_url( View::thing_url( $hh_thing['id'] ) ); ?>"><?php echo esc_html( $hh_thing['title'] ); ?></a></strong>
+                                    <?php if ( $hh_thing['detail'] ) : ?>
+                                        <div class="meta"><?php echo esc_html( $hh_thing['detail'] ); ?></div>
+                                    <?php endif; ?>
+                                    <?php if ( $hh_thing_away && Access::can_reach( $hh_user, $hh_thing_at['home_id'] ) ) : ?>
+                                        <div class="meta">
+                                            <?php
+                                            /* translators: %s: the name of a household. */
+                                            echo esc_html( sprintf( __( 'It is at %s just now.', 'households' ), $hh_thing_at['name'] ) );
+                                            ?>
+                                        </div>
+                                    <?php elseif ( $hh_thing_away ) : ?>
+                                        <div class="meta"><?php echo esc_html__( 'It is not at any of your households just now.', 'households' ); ?></div>
+                                    <?php endif; ?>
+                                    <?php if ( $hh_thing_goes_named ) : ?>
+                                        <div class="meta">
+                                            <?php
+                                            printf(
+                                                $hh_thing_goes['is_packed']
+                                                    /* translators: %s: a link naming a household, and what else is going there. */
+                                                    ? esc_html__( 'In the bag for %s.', 'households' )
+                                                    /* translators: %s: a link naming a household, and what else is going there. */
+                                                    : esc_html__( 'To be packed for %s.', 'households' ),
+                                                '<a href="' . esc_url( View::pack_url( $hh_where['home_id'], (int) $hh_thing_goes['home_id'] ) ) . '">' . esc_html( $hh_thing_goes['name'] ) . '</a>'
+                                            );
+                                            ?>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </li>
                         <?php endforeach; ?>
                     </ul>
                 </section>

@@ -178,7 +178,8 @@ $hh_quiet = $hh_sifted['quiet'];
 
         </section>
 
-        <section>
+        <?php // Ticking something off the packing is a tick like any other, so the section it is in comes back from the server rather than the page going away and returning. ?>
+        <section id="hh-things" data-hh-live-section>
             <div class="row heading">
                 <h2><?php echo esc_html__( 'Things kept here', 'households' ); ?></h2>
                 <?php if ( $hh_writing ) : ?>
@@ -195,6 +196,7 @@ $hh_quiet = $hh_sifted['quiet'];
                     <span class="meta"><?php echo esc_html__( 'Nothing listed yet.', 'households' ); ?></span>
                 <?php endif; ?>
             </div>
+            <?php require __DIR__ . '/_undone.php'; ?>
             <?php // The same line the things pages print, because a thing reads the same wherever it is listed: where it lives, who else keeps it, where it has got to, and where it is to go. The heading has said which household this is. ?>
             <ul class="plain">
                 <?php $hh_homes = $hh['homes']; ?>

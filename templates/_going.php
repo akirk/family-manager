@@ -10,10 +10,14 @@
  *
  * Expects $hh_going_note — the thing; $hh_going_going — where it is to get to,
  * as the storage says it, or nothing; $hh_going_targets — the households of
- * yours it could be sent to; $hh_going_here — the household whose list this is,
- * or 0; and $hh_going_writing, whether this page is in a mood to offer writing
- * at all, which is not only a matter of permission, since a household being
- * read as somebody else is being read rather than organised.
+ * yours it could be sent to; $hh_going_off — whether taking it off is a cross
+ * on a list rather than a sentence on a page; and $hh_going_writing, whether
+ * this page is in a mood to offer writing at all, which is not only a matter
+ * of permission, since a household being read as somebody else is being read
+ * rather than organised.
+ *
+ * What it works out for itself is named for what it is about, because a
+ * partial is read inside the page that requires it and shares its variables.
  */
 
 namespace Households;
@@ -32,21 +36,14 @@ if ( ! $hh_going_writing || ( ! $hh_going_to && ! $hh_going_targets ) ) {
 ?>
 <div class="actions">
     <?php if ( $hh_going_to ) : ?>
-        <?php // In the bag is as good as there: from here on, the house it was going to is where to look for it. Read at that household it is not a bag being packed but a thing arriving, which is what every other list here calls it. ?>
-        <form method="post" class="inline">
-            <?php View::fields( 'note_is_at', [ 'kind' => 'item', 'note_id' => $hh_going_note, 'home_id' => $hh_going_to ] ); ?>
-            <button type="submit" class="quiet">
-                <?php
-                echo $hh_going_here === $hh_going_to
-                    ? esc_html__( 'It is here now', 'households' )
-                    : esc_html__( 'Packed', 'households' );
-                ?>
-            </button>
-        </form>
-        <?php // Called off, which asks nothing of where it is or where it lives. ?>
+        <?php // Saying it has got there is not offered here: on a list it is the box the line is ticked off with and the one press that carries the whole bag, and on a page it is already offered, in the same words as for every other house, by what says where the thing is now. ?>
+        <?php // Off the list, which asks nothing of where it is or where it lives. On a list it is a cross, and easy to mean by mistake, so what it took off is named in the URL and offered back. ?>
         <form method="post" class="inline">
             <?php View::fields( 'note_not_going', [ 'kind' => 'item', 'note_id' => $hh_going_note, 'home_id' => $hh_going_to ] ); ?>
-            <button type="submit" class="quiet"><?php echo esc_html__( 'Not going', 'households' ); ?></button>
+            <button type="submit" class="quiet"
+                <?php if ( $hh_going_off ) : ?>aria-label="<?php echo esc_attr__( 'Take it off the list', 'households' ); ?>"<?php endif; ?>>
+                <?php echo $hh_going_off ? '&times;' : esc_html__( 'Not going', 'households' ); ?>
+            </button>
         </form>
     <?php else : ?>
         <?php // The household is the button rather than the form, so one nonce answers for the whole row of them. ?>

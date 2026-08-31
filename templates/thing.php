@@ -251,8 +251,11 @@ require __DIR__ . '/_head.php';
                     <?php if ( ! empty( $hh_going['home_id'] ) && Access::can_reach( $hh_user, $hh_going['home_id'] ) ) : ?>
                         <?php
                         printf(
-                            /* translators: %s: a link naming a household, and what else is going there. */
-                            esc_html__( 'It is to go to %s, when somebody takes it.', 'households' ),
+                            $hh_going['is_packed']
+                                /* translators: %s: a link naming a household, and what else is going there. */
+                                ? esc_html__( 'It is in the bag for %s, and here until the bag goes.', 'households' )
+                                /* translators: %s: a link naming a household, and what else is going there. */
+                                : esc_html__( 'It is to go to %s, when somebody takes it.', 'households' ),
                             '<a href="' . esc_url( View::pack_url( isset( $hh_at['home_id'] ) ? (int) $hh_at['home_id'] : 0, (int) $hh_going['home_id'] ) ) . '">' . esc_html( $hh_going['name'] ) . '</a>'
                         );
                         ?>
@@ -265,8 +268,11 @@ require __DIR__ . '/_head.php';
                 <?php
                 $hh_going_note = $hh_thing['id'];
                 $hh_going_going = $hh_going;
-                $hh_going_here = 0;
                 $hh_going_writing = (bool) $hh_writing;
+                // A page is not a list: it says what it means in words, and
+                // says it once — that it has got there is what the section
+                // above is for, whichever house it has got to.
+                $hh_going_off = false;
                 ?>
                 <?php require __DIR__ . '/_going.php'; ?>
             </div>

@@ -608,10 +608,11 @@ class Storage {
             return false;
         }
         update_post_meta( $post_id, self::META_AT, $home_id );
-        // Arrived where it was going, and there is nothing left to remember:
-        // the plan was to get it here. Said to be anywhere else it is still on
-        // its way, and the list it is on simply starts from where it now is.
-        if ( (int) get_post_meta( $post_id, self::META_GOING, true ) === $home_id ) {
+        // Said to be where it was going, it has got there, and there is
+        // nothing left to remember: the whole of the plan was to get it here.
+        // Said to be anywhere else it is still on its way, and the list it is
+        // on simply starts from where it now is.
+        if ( $this->going_mark( $post_id )['to'] === $home_id ) {
             delete_post_meta( $post_id, self::META_GOING );
         }
         $this->going = null;
@@ -627,16 +628,42 @@ class Storage {
      * this is a second mark beside that one, and saying it moves nothing: what
      * moves the thing is somebody saying it has got there.
      *
+     * The mark remembers whether it is in the bag yet, which is a third thing
+     * again: packing something is neither where it is nor where it is to go.
+     * It is at the house it was at, in a bag by the door, until somebody
+     * actually carries the bag.
+     *
      * @param int[] $keepers the households that keep it.
-     * @return array{home_id:int,name:string,kept:bool} home_id 0 when it is going nowhere.
+     * @return array{home_id:int,name:string,kept:bool,packed_at:string,is_packed:bool}
+     *               home_id 0 when it is going nowhere.
      */
-    private function going_of_note( int $post_id, array $keepers, int $at_home_id ): array {
-        $said = (int) get_post_meta( $post_id, self::META_GOING, true );
-        $home = $said && $said !== $at_home_id ? $this->get_home( $said ) : [];
+    private function going_of_note( int $post_id, array $keepers ): array {
+        $said = $this->going_mark( $post_id );
+        $home = $said['to'] ? $this->get_home( $said['to'] ) : [];
         return [
-            'home_id' => isset( $home['id'] ) ? (int) $home['id'] : 0,
-            'name'    => isset( $home['name'] ) ? (string) $home['name'] : '',
-            'kept'    => isset( $home['id'] ) && in_array( (int) $home['id'], $keepers, true ),
+            'home_id'   => isset( $home['id'] ) ? (int) $home['id'] : 0,
+            'name'      => isset( $home['name'] ) ? (string) $home['name'] : '',
+            'kept'      => isset( $home['id'] ) && in_array( (int) $home['id'], $keepers, true ),
+            'packed_at' => $home ? $said['packed'] : '',
+            'is_packed' => (bool) ( $home && $said['packed'] ),
+        ];
+    }
+
+    /**
+     * The going mark as it is stored: where to, and when it went in the bag.
+     * Written before the two were told apart, it is the household it was to go
+     * to and nothing else.
+     *
+     * @return array{to:int,packed:string}
+     */
+    private function going_mark( int $post_id ): array {
+        $said = get_post_meta( $post_id, self::META_GOING, true );
+        if ( ! is_array( $said ) ) {
+            return [ 'to' => (int) $said, 'packed' => '' ];
+        }
+        return [
+            'to'     => isset( $said['to'] ) ? (int) $said['to'] : 0,
+            'packed' => isset( $said['packed'] ) ? (string) $said['packed'] : '',
         ];
     }
 
@@ -660,8 +687,64 @@ class Storage {
             delete_post_meta( $post_id, self::META_GOING );
             return false;
         }
-        update_post_meta( $post_id, self::META_GOING, $home_id );
+        update_post_meta( $post_id, self::META_GOING, [
+            'to'     => $home_id,
+            'packed' => '',
+        ] );
         return true;
+    }
+
+    /**
+     * Tick a thing off the packlist, or take the tick back.
+     *
+     * Packing something is not moving it. It is in a bag by the door, at the
+     * house it was already at, and where to look for it is still that house
+     * until somebody carries the bag — which is said once for the whole trip
+     * rather than once for every thing in it. So this touches nothing but
+     * whether the line is struck through.
+     */
+    public function toggle_packed( int $home_id, string $post_type, int $post_id ): bool {
+        $post = $post_id ? get_post( $post_id ) : null;
+        $said = $post ? $this->going_mark( $post_id ) : [ 'to' => 0 ];
+        if ( ! $post || self::ITEM !== $post_type || $post_type !== $post->post_type || $said['to'] !== $home_id ) {
+            return false;
+        }
+        $this->going = null;
+        $said['packed'] = $said['packed'] ? '' : current_time( 'mysql' );
+        update_post_meta( $post_id, self::META_GOING, $said );
+        return true;
+    }
+
+    /**
+     * The bag has been carried: everything in it is at the household it was
+     * going to, and off the list.
+     *
+     * What was not packed is not what was taken, so it stays where it is and
+     * stays on the list for the next trip that way — which is the whole reason
+     * the bag is ticked off thing by thing and carried in one go.
+     *
+     * @return int how many things went.
+     */
+    public function things_arrived( int $user_id, int $from_home_id, int $to_home_id ): int {
+        $gone = 0;
+        foreach ( $this->things_going() as $thing ) {
+            if ( ! $thing['going']['is_packed'] || $thing['going']['home_id'] !== $to_home_id ) {
+                continue;
+            }
+            if ( $thing['at']['home_id'] !== $from_home_id ) {
+                continue;
+            }
+            // A thing kept in none of the viewer's households is not theirs to
+            // say anything about, however the bag it was in got here.
+            if ( ! $this->may_reach_note( $user_id, $thing['id'], self::ITEM ) ) {
+                continue;
+            }
+            update_post_meta( $thing['id'], self::META_AT, $to_home_id );
+            delete_post_meta( $thing['id'], self::META_GOING );
+            $gone++;
+        }
+        $this->going = null;
+        return $gone;
     }
 
     /** It is not going after all, which asks nothing of where it is or lives. */
@@ -765,7 +848,7 @@ class Storage {
                 // when it is somewhere other than where the list is read.
                 'at'       => $at,
                 // And where it is to get to, which is nowhere it is yet.
-                'going'    => $item ? $this->going_of_note( $post_id, $home_ids, $at['home_id'] ) : [],
+                'going'    => $item ? $this->going_of_note( $post_id, $home_ids ) : [],
                 'modified' => $post->post_modified,
             ];
         }
@@ -856,7 +939,7 @@ class Storage {
             'at'        => $at,
             // And which one it is to get to, which is not where it is.
             'going'     => self::ITEM === $post_type
-                ? $this->going_of_note( (int) $post->ID, $keepers, $at['home_id'] )
+                ? $this->going_of_note( (int) $post->ID, $keepers )
                 : [],
         ];
     }
@@ -977,7 +1060,7 @@ class Storage {
             }
             $keepers = $this->home_ids_of_post( $post_id );
             $at = $this->at_of_note( $post_id, $keepers );
-            $going = $this->going_of_note( $post_id, $keepers, $at['home_id'] );
+            $going = $this->going_of_note( $post_id, $keepers );
             // A household that has since gone is not somewhere to take
             // anything, so what was said about it says nothing now.
             if ( ! $going['home_id'] ) {
@@ -1026,6 +1109,9 @@ class Storage {
             if ( ! in_array( $thing['going']['home_id'], $mine, true ) ) {
                 continue;
             }
+            // The house the bag is being packed at, which is wherever the
+            // thing is: packing it does not move it, so a ticked-off thing
+            // stays on the list it was ticked off on until the bag is carried.
             $from = $thing['at']['home_id'];
             $named = $from && in_array( $from, $mine, true );
             $key = $from . ':' . $thing['going']['home_id'];
@@ -1036,12 +1122,16 @@ class Storage {
                     'to_id'     => $thing['going']['home_id'],
                     'to_name'   => $thing['going']['name'],
                     'things'    => [],
+                    // How much of it is in the bag, because a bag with
+                    // something in it is one that can be carried.
+                    'packed'    => 0,
                     'date'      => '',
                     'when'      => '',
                     'people'    => [],
                 ];
             }
             $routes[ $key ]['things'][] = $thing;
+            $routes[ $key ]['packed'] += $thing['going']['is_packed'] ? 1 : 0;
         }
 
         // The first trip along each route, so a list that has a day to be
@@ -1059,7 +1149,12 @@ class Storage {
 
         $routes = array_values( $routes );
         foreach ( $routes as &$route ) {
+            // Still to be packed first, and what was ticked off under it, the
+            // way a list of things to do reads.
             usort( $route['things'], static function( array $a, array $b ): int {
+                if ( $a['going']['is_packed'] !== $b['going']['is_packed'] ) {
+                    return $a['going']['is_packed'] ? 1 : -1;
+                }
                 return strcasecmp( $a['title'], $b['title'] );
             } );
         }
@@ -1077,10 +1172,16 @@ class Storage {
         return $routes;
     }
 
-    /** How much is waiting to go this way, for a line that only counts. */
+    /**
+     * How much is still to be packed to go this way, for a line that only
+     * counts. What has been ticked off is not what a trip has left to do.
+     */
     public function count_going( int $from_home_id, int $to_home_id ): int {
         $waiting = 0;
         foreach ( $this->things_going() as $thing ) {
+            if ( $thing['going']['is_packed'] ) {
+                continue;
+            }
             if ( $thing['at']['home_id'] === $from_home_id && $thing['going']['home_id'] === $to_home_id ) {
                 ++$waiting;
             }
