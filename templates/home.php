@@ -195,63 +195,16 @@ $hh_quiet = $hh_sifted['quiet'];
                     <span class="meta"><?php echo esc_html__( 'Nothing listed yet.', 'households' ); ?></span>
                 <?php endif; ?>
             </div>
+            <?php // The same line the things pages print, because a thing reads the same wherever it is listed: where it lives, who else keeps it, where it has got to, and where it is to go. The heading has said which household this is. ?>
             <ul class="plain">
-                <?php foreach ( $hh['items'] as $hh_note ) : ?>
+                <?php $hh_homes = $hh['homes']; ?>
+                <?php foreach ( $hh['items'] as $hh_thing ) : ?>
                     <?php
-                    // The households of yours that keep it as well: said on the
-                    // line, so it is clear this is not the only place it is.
-                    $hh_also = [];
-                    foreach ( $hh['homes'] as $hh_other ) {
-                        if ( $hh_other['id'] !== $hh['home']['id'] && in_array( $hh_other['id'], $hh_note['home_ids'], true ) ) {
-                            $hh_also[] = $hh_other;
-                        }
-                    }
-
-                    // Kept here, but not here: where it has got to is worth
-                    // saying on this list exactly when it is somewhere else.
-                    // Somebody else's household is not named, only that it is
-                    // not one of yours.
-                    $hh_at = ! empty( $hh_note['at'] ) ? $hh_note['at'] : [];
-                    $hh_at_away = ! empty( $hh_at['home_id'] ) && $hh_at['home_id'] !== $hh['home']['id'];
-                    $hh_at_named = $hh_at_away && Access::can_reach( $hh_user, $hh_at['home_id'] );
+                    $hh_thing_home = $hh['home']['id'];
+                    $hh_thing_writing = $hh_writing;
+                    $hh_thing_going_said = false;
                     ?>
-                    <li class="row">
-                        <div class="grow">
-                            <strong><a href="<?php echo esc_url( View::thing_url( $hh_note['id'] ) ); ?>"><?php echo esc_html( $hh_note['title'] ); ?></a></strong>
-                            <?php if ( $hh_note['detail'] ) : ?>
-                                <div class="meta"><?php echo esc_html( $hh_note['detail'] ); ?></div>
-                            <?php endif; ?>
-                            <?php if ( $hh_also ) : ?>
-                                <div class="actions" style="margin-top:4px">
-                                    <?php foreach ( $hh_also as $hh_other ) : ?>
-                                        <a class="pill" href="<?php echo esc_url( View::home_url( $hh_other['id'] ) ); ?>">
-                                            <?php
-                                            /* translators: %s: the name of a household. */
-                                            echo esc_html( sprintf( __( 'also kept at %s', 'households' ), $hh_other['name'] ) );
-                                            ?>
-                                        </a>
-                                    <?php endforeach; ?>
-                                </div>
-                            <?php endif; ?>
-                            <?php if ( $hh_at_named ) : ?>
-                                <div class="meta">
-                                    <?php
-                                    /* translators: %s: the name of a household. */
-                                    echo esc_html( sprintf( __( 'It is at %s just now.', 'households' ), $hh_at['name'] ) );
-                                    ?>
-                                </div>
-                            <?php elseif ( $hh_at_away ) : ?>
-                                <div class="meta"><?php echo esc_html__( 'It is not at any of your households just now.', 'households' ); ?></div>
-                            <?php endif; ?>
-                        </div>
-                        <?php // Where it has got to is not where it belongs: saying it is back here leaves the line about where it lives, here and everywhere else, exactly as it was. ?>
-                        <?php if ( $hh_writing && ( empty( $hh_at['home_id'] ) || $hh_at['home_id'] !== $hh['home']['id'] ) ) : ?>
-                            <form method="post">
-                                <?php View::fields( 'note_is_at', [ 'kind' => 'item', 'note_id' => $hh_note['id'], 'home_id' => $hh['home']['id'] ] ); ?>
-                                <button type="submit" class="quiet"><?php echo esc_html__( 'It is here now', 'households' ); ?></button>
-                            </form>
-                        <?php endif; ?>
-                    </li>
+                    <?php require __DIR__ . '/_thing.php'; ?>
                 <?php endforeach; ?>
             </ul>
 

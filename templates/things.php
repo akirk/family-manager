@@ -99,8 +99,11 @@ require __DIR__ . '/_head.php';
                 </ul>
             <?php elseif ( $hh_flat ) : ?>
                 <ul class="plain">
+                    <?php // Read as one list, no household is the one you are standing in, so this is a page for finding a thing rather than for saying anything about it. ?>
                     <?php foreach ( $hh_things as $hh_thing ) : ?>
                         <?php $hh_thing_home = 0; ?>
+                        <?php $hh_thing_writing = false; ?>
+                        <?php $hh_thing_going_said = false; ?>
                         <?php require __DIR__ . '/_thing.php'; ?>
                     <?php endforeach; ?>
                 </ul>
@@ -115,6 +118,8 @@ require __DIR__ . '/_head.php';
                         <?php endif; ?>
                         <?php foreach ( $hh_group['things'] as $hh_thing ) : ?>
                             <?php $hh_thing_home = $hh_group_id; ?>
+                            <?php $hh_thing_writing = true; ?>
+                            <?php $hh_thing_going_said = false; ?>
                             <?php require __DIR__ . '/_thing.php'; ?>
                         <?php endforeach; ?>
                     </ul>

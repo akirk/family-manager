@@ -85,6 +85,9 @@ class App extends BaseApp {
         $this->app->route( 'where', 'where.php' );
         // Everything kept across the homes you belong to, and where it is.
         $this->app->route( 'things', 'things.php' );
+        // What is waiting to be taken from one home to another, and the trip
+        // it is waiting for.
+        $this->app->route( 'pack', 'pack.php' );
         // A person, and what travels with them between homes.
         $this->app->route( 'person/{person_id}', 'person.php' );
         // One thing: what it is, where it lives, and which household it is at.
@@ -117,6 +120,7 @@ class App extends BaseApp {
         $this->app->add_menu_item( 'homes', __( 'Your households', 'households' ), $base . 'homes/' );
         $this->app->add_menu_item( 'where', __( 'Who is where', 'households' ), $base . 'where/' );
         $this->app->add_menu_item( 'things', __( 'Things', 'households' ), $base . 'things/' );
+        $this->app->add_menu_item( 'pack', __( 'What to pack', 'households' ), $base . 'pack/' );
 
         $open = $this->home_in_view( $user_id );
         if ( $open && Access::can_manage( $user_id, $open ) ) {
@@ -647,17 +651,19 @@ class App extends BaseApp {
                 break;
 
             // Kept at one more household, said afresh where it lives at one it
-            // is already kept at, given up by one, or said to be at one right
-            // now. The household each is about is the household the form names,
-            // so it is that one's permission that is asked for — and the thing
-            // has to be one the viewer could open, or any post ID would do to
-            // put anything in a house of theirs.
+            // is already kept at, given up by one, said to be at one right now,
+            // or said to be going to one. The household each is about is the
+            // household the form names, so it is that one's permission that is
+            // asked for — and the thing has to be one the viewer could open, or
+            // any post ID would do to put anything in a house of theirs.
             //
             // Things only: a fact is true of one house, and a house that is not
             // being told anything is not one to add it to.
             case 'keep_note_at':
             case 'drop_note_at':
             case 'note_is_at':
+            case 'note_goes_to':
+            case 'note_not_going':
                 $kind = $this->note_type( $post( 'kind', 'key' ) );
                 $note_id = $post( 'note_id', 'int' );
                 if ( Storage::ITEM !== $kind || ! $can_organise || ! $this->storage->may_reach_note( $user_id, $note_id, $kind ) ) {
@@ -672,6 +678,18 @@ class App extends BaseApp {
                 // about where it lives is touched by saying so.
                 if ( 'note_is_at' === $action ) {
                     $this->storage->say_note_is_at( $home_id, $kind, $note_id );
+                    break;
+                }
+                // Where it is to get to is not where it is: saying so moves
+                // nothing, and what moves it is somebody saying it has got
+                // there. Calling it off is asked of the same household as
+                // saying it, because it is the same sentence taken back.
+                if ( 'note_goes_to' === $action ) {
+                    $this->storage->say_note_goes_to( $home_id, $kind, $note_id );
+                    break;
+                }
+                if ( 'note_not_going' === $action ) {
+                    $this->storage->say_note_is_not_going( $kind, $note_id );
                     break;
                 }
                 $this->storage->drop_note_at( $home_id, $kind, $note_id );

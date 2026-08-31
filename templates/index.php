@@ -189,32 +189,14 @@ require __DIR__ . '/_head.php';
                         <?php elseif ( ! $hh_here['items'] ) : ?>
                             <li class="empty"><?php echo esc_html__( 'Nothing listed here yet.', 'households' ); ?></li>
                         <?php endif; ?>
+                        <?php // The same line the things pages print, read rather than written: this is the shelf, and what is to be said about a thing is said where things are kept. A thing that lives here but has gone somewhere else says so, because the drawer it lives in is no help today. ?>
                         <?php foreach ( isset( $hh_here['items'] ) ? $hh_here['items'] : [] as $hh_thing ) : ?>
                             <?php
-                            // The shelf you can actually reach, so a thing that
-                            // lives here but has gone somewhere else says so:
-                            // the drawer it lives in is no help today.
-                            $hh_thing_at = ! empty( $hh_thing['at'] ) ? $hh_thing['at'] : [];
-                            $hh_thing_away = ! empty( $hh_thing_at['home_id'] ) && $hh_thing_at['home_id'] !== $hh_here['home']['id'];
+                            $hh_thing_home = $hh_here['home']['id'];
+                            $hh_thing_writing = false;
+                            $hh_thing_going_said = false;
                             ?>
-                            <li class="row">
-                                <div class="grow">
-                                    <strong><a href="<?php echo esc_url( View::thing_url( $hh_thing['id'] ) ); ?>"><?php echo esc_html( $hh_thing['title'] ); ?></a></strong>
-                                    <?php if ( $hh_thing['detail'] ) : ?>
-                                        <div class="meta"><?php echo esc_html( $hh_thing['detail'] ); ?></div>
-                                    <?php endif; ?>
-                                    <?php if ( $hh_thing_away && Access::can_reach( $hh_user, $hh_thing_at['home_id'] ) ) : ?>
-                                        <div class="meta">
-                                            <?php
-                                            /* translators: %s: the name of a household. */
-                                            echo esc_html( sprintf( __( 'It is at %s just now.', 'households' ), $hh_thing_at['name'] ) );
-                                            ?>
-                                        </div>
-                                    <?php elseif ( $hh_thing_away ) : ?>
-                                        <div class="meta"><?php echo esc_html__( 'It is not at any of your households just now.', 'households' ); ?></div>
-                                    <?php endif; ?>
-                                </div>
-                            </li>
+                            <?php require __DIR__ . '/_thing.php'; ?>
                         <?php endforeach; ?>
                     </ul>
                 </section>
@@ -320,6 +302,20 @@ require __DIR__ . '/_head.php';
                                     <?php endif; ?>
                                 </div>
                                 <div class="actions">
+                                    <?php // What is waiting to go along on that trip, and the bag it is waiting in. ?>
+                                    <?php if ( 'move' === $hh_entry['kind'] && ! empty( $hh_entry['to_pack'] ) ) : ?>
+                                        <a class="pill warm" href="<?php echo esc_url( View::pack_url( $hh_entry['from_id'], $hh_entry['home_id'] ) ); ?>">
+                                            <?php
+                                            printf(
+                                                esc_html(
+                                                    /* translators: %d: how many things are waiting to be taken along. */
+                                                    _n( '%d to pack', '%d to pack', $hh_entry['to_pack'], 'households' )
+                                                ),
+                                                (int) $hh_entry['to_pack']
+                                            );
+                                            ?>
+                                        </a>
+                                    <?php endif; ?>
                                     <?php // A move names both households in its line; the pill would say it twice. ?>
                                     <?php if ( $hh_entry['home_id'] && 'move' !== $hh_entry['kind'] ) : ?>
                                         <a class="pill" style="text-decoration:none" href="<?php echo esc_url( View::home_url( $hh_entry['home_id'] ) ); ?>">

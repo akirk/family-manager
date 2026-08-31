@@ -16,6 +16,19 @@ namespace Households;
  * to know — is the post's own content, so its history is the post's revisions.
  */
 class Storage {
+    /**
+     * Every thing on its way somewhere, worked out once.
+     *
+     * The overview and the board ask how much is waiting on a route once per
+     * trip they name, which is a question about the same handful of things
+     * each time. Nothing changes it within a request: a form that does is
+     * answered before anything is rendered and redirects, and what does write
+     * puts this back to being unasked.
+     *
+     * @var array[]|null
+     */
+    private $going = null;
+
     public const WP_ROLE = 'households_member';
 
     public const FACT = 'household_fact';
@@ -30,6 +43,7 @@ class Storage {
     /** Item meta. */
     public const META_WHERE = '_households_where';
     public const META_AT    = '_households_at';
+    public const META_GOING = '_households_going';
 
     /** Task meta. */
     public const META_TASK_TYPE = '_households_task_type';
@@ -594,6 +608,70 @@ class Storage {
             return false;
         }
         update_post_meta( $post_id, self::META_AT, $home_id );
+        // Arrived where it was going, and there is nothing left to remember:
+        // the plan was to get it here. Said to be anywhere else it is still on
+        // its way, and the list it is on simply starts from where it now is.
+        if ( (int) get_post_meta( $post_id, self::META_GOING, true ) === $home_id ) {
+            delete_post_meta( $post_id, self::META_GOING );
+        }
+        $this->going = null;
+        return true;
+    }
+
+    /**
+     * Where a thing is to get to, which is not yet where it is.
+     *
+     * Between deciding the swimming bag has to be at the other house and it
+     * being there is a bag that has to be packed, and for all of that time the
+     * truthful answer to where the thing is is the house it is standing in. So
+     * this is a second mark beside that one, and saying it moves nothing: what
+     * moves the thing is somebody saying it has got there.
+     *
+     * @param int[] $keepers the households that keep it.
+     * @return array{home_id:int,name:string,kept:bool} home_id 0 when it is going nowhere.
+     */
+    private function going_of_note( int $post_id, array $keepers, int $at_home_id ): array {
+        $said = (int) get_post_meta( $post_id, self::META_GOING, true );
+        $home = $said && $said !== $at_home_id ? $this->get_home( $said ) : [];
+        return [
+            'home_id' => isset( $home['id'] ) ? (int) $home['id'] : 0,
+            'name'    => isset( $home['name'] ) ? (string) $home['name'] : '',
+            'kept'    => isset( $home['id'] ) && in_array( (int) $home['id'], $keepers, true ),
+        ];
+    }
+
+    /**
+     * Say a thing is to go to a household. Only that: it is where it was until
+     * somebody says it has got there, and no line about where it lives is
+     * touched, because something being wanted elsewhere is not something
+     * changing where it belongs.
+     *
+     * Saying it is to go where it already is is not a plan, and is the same as
+     * saying nothing.
+     */
+    public function say_note_goes_to( int $home_id, string $post_type, int $post_id ): bool {
+        $post = $post_id ? get_post( $post_id ) : null;
+        if ( ! $post || self::ITEM !== $post_type || $post_type !== $post->post_type || ! $this->get_home( $home_id ) ) {
+            return false;
+        }
+        $this->going = null;
+        $keepers = $this->home_ids_of_post( $post_id );
+        if ( $this->at_of_note( $post_id, $keepers )['home_id'] === $home_id ) {
+            delete_post_meta( $post_id, self::META_GOING );
+            return false;
+        }
+        update_post_meta( $post_id, self::META_GOING, $home_id );
+        return true;
+    }
+
+    /** It is not going after all, which asks nothing of where it is or lives. */
+    public function say_note_is_not_going( string $post_type, int $post_id ): bool {
+        $post = $post_id ? get_post( $post_id ) : null;
+        if ( ! $post || self::ITEM !== $post_type || $post_type !== $post->post_type ) {
+            return false;
+        }
+        delete_post_meta( $post_id, self::META_GOING );
+        $this->going = null;
         return true;
     }
 
@@ -672,14 +750,22 @@ class Storage {
             }
             $item = self::ITEM === $post_type;
             $home_ids = $item ? $this->home_ids_of_post( $post_id ) : [ $home_id ];
+            $at = $item ? $this->at_of_note( $post_id, $home_ids ) : [];
             $notes[] = [
                 'id'       => (int) $post->ID,
                 'title'    => $post->post_title,
                 'detail'   => $item ? $this->where_at( $post, $home_id ) : $post->post_content,
                 'home_ids' => $home_ids,
+                // And those households named, each with its own line, in the
+                // shape the pages that span households read: a thing is one
+                // thing whichever list it is being read on, so the row that
+                // prints it need not be written twice.
+                'homes'    => $item ? $this->homes_of_note( $post, $post_type ) : [],
                 // Where a thing is at this moment, which the list says only
                 // when it is somewhere other than where the list is read.
-                'at'       => $item ? $this->at_of_note( $post_id, $home_ids ) : [],
+                'at'       => $at,
+                // And where it is to get to, which is nowhere it is yet.
+                'going'    => $item ? $this->going_of_note( $post_id, $home_ids, $at['home_id'] ) : [],
                 'modified' => $post->post_modified,
             ];
         }
@@ -751,6 +837,8 @@ class Storage {
         if ( ! $homes ) {
             return [];
         }
+        $keepers = wp_list_pluck( $homes, 'id' );
+        $at = self::ITEM === $post_type ? $this->at_of_note( (int) $post->ID, $keepers ) : [];
         return [
             'id'        => (int) $post->ID,
             'title'     => $post->post_title,
@@ -765,8 +853,10 @@ class Storage {
             // the two pages read alike.
             'homes'     => $homes,
             // And which household it is at just now, kept there or lent there.
-            'at'        => self::ITEM === $post_type
-                ? $this->at_of_note( (int) $post->ID, wp_list_pluck( $homes, 'id' ) )
+            'at'        => $at,
+            // And which one it is to get to, which is not where it is.
+            'going'     => self::ITEM === $post_type
+                ? $this->going_of_note( (int) $post->ID, $keepers, $at['home_id'] )
                 : [],
         ];
     }
@@ -830,6 +920,7 @@ class Storage {
                         'id'    => $id,
                         'title' => $thing['title'],
                         'at'    => $thing['at'],
+                        'going' => $thing['going'],
                         'homes' => [],
                     ];
                 }
@@ -851,6 +942,150 @@ class Storage {
             return strcasecmp( $a['title'], $b['title'] );
         } );
         return $things;
+    }
+
+    /**
+     * Every thing on its way somewhere: what it is, where it is, where it is
+     * to get to, and which households keep it.
+     *
+     * @return array[] keyed by post ID.
+     */
+    private function things_going(): array {
+        if ( null !== $this->going ) {
+            return $this->going;
+        }
+        $this->going = [];
+        $post_ids = array_map( 'intval', get_posts( [
+            'fields'           => 'ids',
+            'numberposts'      => -1,
+            'order'            => 'ASC',
+            'orderby'          => 'ID',
+            'post_status'      => 'private',
+            'post_type'        => self::ITEM,
+            'suppress_filters' => false,
+            'meta_query'       => [
+                [
+                    'key'     => self::META_GOING,
+                    'compare' => 'EXISTS',
+                ],
+            ],
+        ] ) );
+        foreach ( $post_ids as $post_id ) {
+            $post = get_post( $post_id );
+            if ( ! $post ) {
+                continue;
+            }
+            $keepers = $this->home_ids_of_post( $post_id );
+            $at = $this->at_of_note( $post_id, $keepers );
+            $going = $this->going_of_note( $post_id, $keepers, $at['home_id'] );
+            // A household that has since gone is not somewhere to take
+            // anything, so what was said about it says nothing now.
+            if ( ! $going['home_id'] ) {
+                continue;
+            }
+            $this->going[ $post_id ] = [
+                'id'       => $post_id,
+                'title'    => $post->post_title,
+                'home_ids' => $keepers,
+                // Named, so the packlist prints the same row every other list
+                // of things does.
+                'homes'    => $this->homes_of_note( $post, self::ITEM ),
+                'at'       => $at,
+                'going'    => $going,
+            ];
+        }
+        return $this->going;
+    }
+
+    /**
+     * What is waiting to be taken from one household to another, a trip at a
+     * time.
+     *
+     * Things going the same way are one list, because that is one bag. The
+     * trip itself is whatever move the fortnight already holds along the same
+     * route: the list is the answer to "what goes with us", so it says when
+     * "with us" is, and says plainly when nobody is going that way yet.
+     *
+     * The household it is going to has to be one of the viewer's, and so has
+     * one of the houses that keep it: a bag they could do nothing about is not
+     * one to hand them. Where it is coming from is named only if that too is
+     * theirs — a thing lent to somewhere that is not is still waiting to come
+     * back, and is still on the list, but the house it is at is not named any
+     * more than it is anywhere else. Nobody has said where it is at all and
+     * that is a list of its own rather than a guess.
+     *
+     * @return array[] each route naming what it may, what is waiting, and when.
+     */
+    public function get_packlist( int $user_id ): array {
+        $mine = Access::home_ids_for_user( $user_id );
+        $routes = [];
+        foreach ( $this->things_going() as $thing ) {
+            if ( ! array_intersect( $thing['home_ids'], $mine ) ) {
+                continue;
+            }
+            if ( ! in_array( $thing['going']['home_id'], $mine, true ) ) {
+                continue;
+            }
+            $from = $thing['at']['home_id'];
+            $named = $from && in_array( $from, $mine, true );
+            $key = $from . ':' . $thing['going']['home_id'];
+            if ( ! isset( $routes[ $key ] ) ) {
+                $routes[ $key ] = [
+                    'from_id'   => $from,
+                    'from_name' => $named ? $thing['at']['name'] : '',
+                    'to_id'     => $thing['going']['home_id'],
+                    'to_name'   => $thing['going']['name'],
+                    'things'    => [],
+                    'date'      => '',
+                    'when'      => '',
+                    'people'    => [],
+                ];
+            }
+            $routes[ $key ]['things'][] = $thing;
+        }
+
+        // The first trip along each route, so a list that has a day to be
+        // ready by says which one it is.
+        $today = current_time( 'Y-m-d' );
+        foreach ( $this->agenda_moves( $user_id, $today, self::AGENDA_DAYS ) as $move ) {
+            $key = $move['from_id'] . ':' . $move['home_id'];
+            if ( ! isset( $routes[ $key ] ) || $routes[ $key ]['date'] ) {
+                continue;
+            }
+            $routes[ $key ]['date'] = $move['date'];
+            $routes[ $key ]['when'] = $this->say_date( $move['date'], $today );
+            $routes[ $key ]['people'] = $move['people'];
+        }
+
+        $routes = array_values( $routes );
+        foreach ( $routes as &$route ) {
+            usort( $route['things'], static function( array $a, array $b ): int {
+                return strcasecmp( $a['title'], $b['title'] );
+            } );
+        }
+        unset( $route );
+        // Soonest first, and the routes nobody is travelling yet after them.
+        usort( $routes, static function( array $a, array $b ): int {
+            if ( ( '' === $a['date'] ) !== ( '' === $b['date'] ) ) {
+                return '' === $a['date'] ? 1 : -1;
+            }
+            if ( ( '' === $a['from_name'] ) !== ( '' === $b['from_name'] ) ) {
+                return '' === $a['from_name'] ? 1 : -1;
+            }
+            return strcmp( $a['date'], $b['date'] ) ?: strcasecmp( $a['to_name'], $b['to_name'] );
+        } );
+        return $routes;
+    }
+
+    /** How much is waiting to go this way, for a line that only counts. */
+    public function count_going( int $from_home_id, int $to_home_id ): int {
+        $waiting = 0;
+        foreach ( $this->things_going() as $thing ) {
+            if ( $thing['at']['home_id'] === $from_home_id && $thing['going']['home_id'] === $to_home_id ) {
+                ++$waiting;
+            }
+        }
+        return $waiting;
     }
 
     /* ---------------------------------------------------------------- Tasks */
@@ -1249,9 +1484,13 @@ class Storage {
                                 'title'     => '',
                                 'who'       => '',
                                 'people'    => [],
+                                'from_id'   => $from['id'] ?? 0,
                                 'from_name' => $from['name'] ?? '',
                                 'home_id'   => $to['id'] ?? 0,
                                 'home_name' => $to['name'] ?? '',
+                                // What is waiting to go along with them, so
+                                // the line that says the trip can say it.
+                                'to_pack'   => $this->count_going( $previous['home_id'], $day['home_id'] ),
                             ];
                         }
                         $moves[ $key ]['people'][] = $person['name'];
@@ -1465,6 +1704,9 @@ class Storage {
                             'to_name'   => $day['home_name'],
                             'direction' => $previous['home_id'] === $home_id ? 'out' : ( $day['home_id'] === $home_id ? 'in' : 'elsewhere' ),
                             'people'    => [],
+                            // What is waiting to go along, so a trip can say
+                            // there is a bag to fill before it.
+                            'to_pack'   => $this->count_going( $previous['home_id'], $day['home_id'] ),
                         ];
                     }
                     $handovers[ $key ]['people'][] = $person['name'];

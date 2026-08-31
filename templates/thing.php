@@ -70,6 +70,17 @@ foreach ( $hh_elsewhere as $hh_other ) {
     }
 }
 
+// Where it is to get to, which is not where it is. Anywhere of yours it is not
+// already at can be asked for, keeper or not: taking the wellies back to the
+// house that keeps them is the same sentence as taking a charger along.
+$hh_going = $hh_reach && ! empty( $hh_thing['going'] ) ? $hh_thing['going'] : [];
+$hh_going_targets = [];
+foreach ( View::storage()->get_homes_for_user( $hh_user ) as $hh_other ) {
+    if ( ( empty( $hh_at['home_id'] ) || $hh_other['id'] !== $hh_at['home_id'] ) && current_user_can( 'organise_household', $hh_other['id'] ) ) {
+        $hh_going_targets[] = $hh_other;
+    }
+}
+
 $hh_title = $hh_reach ? $hh_thing['title'] : __( 'Thing', 'households' );
 
 require __DIR__ . '/_head.php';
@@ -232,6 +243,32 @@ require __DIR__ . '/_head.php';
                         <?php endforeach; ?>
                     </form>
                 <?php endif; ?>
+            </div>
+
+            <?php // Where it is to get to is its own line under where it is, because it is its own question: saying it moves nothing, and what moves the thing is somebody saying it has got there. ?>
+            <div class="row" style="margin-top:10px">
+                <div class="grow">
+                    <?php if ( ! empty( $hh_going['home_id'] ) && Access::can_reach( $hh_user, $hh_going['home_id'] ) ) : ?>
+                        <?php
+                        printf(
+                            /* translators: %s: a link naming a household, and what else is going there. */
+                            esc_html__( 'It is to go to %s, when somebody takes it.', 'households' ),
+                            '<a href="' . esc_url( View::pack_url( isset( $hh_at['home_id'] ) ? (int) $hh_at['home_id'] : 0, (int) $hh_going['home_id'] ) ) . '">' . esc_html( $hh_going['name'] ) . '</a>'
+                        );
+                        ?>
+                    <?php elseif ( ! empty( $hh_going['home_id'] ) ) : ?>
+                        <span class="meta"><?php echo esc_html__( 'It is to go somewhere that is not yours.', 'households' ); ?></span>
+                    <?php elseif ( $hh_going_targets ) : ?>
+                        <span class="meta"><?php echo esc_html__( 'It is not waiting to go anywhere.', 'households' ); ?></span>
+                    <?php endif; ?>
+                </div>
+                <?php
+                $hh_going_note = $hh_thing['id'];
+                $hh_going_going = $hh_going;
+                $hh_going_here = 0;
+                $hh_going_writing = (bool) $hh_writing;
+                ?>
+                <?php require __DIR__ . '/_going.php'; ?>
             </div>
         </section>
 
