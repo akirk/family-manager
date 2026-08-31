@@ -17,9 +17,17 @@ namespace Households;
  *
  * A single day is said outright with an override, which wins over the cycle and
  * leaves the pattern untouched — a swapped weekend should not shift every week
- * after it. A day can be said with no pattern behind it at all, which is how
- * someone who belongs to several homes and rotates between none answers the
- * question for today without inventing an arrangement they do not have.
+ * after it. The days ahead can be said the same way, in a run, which is how a
+ * stay is planned rather than a day swapped: still days, still leaving the
+ * pattern alone, and the pattern picks up again when the run ends.
+ *
+ * A day can be said with no pattern behind it at all, which is how someone who
+ * belongs to several homes and rotates between none answers the question
+ * without inventing an arrangement they do not have. With nothing else to
+ * answer for the days that follow, that statement stands until another one is
+ * made: somebody who moved on Tuesday is still there on Wednesday. So the
+ * fortnight after a move reads as the move — the same home, day after day —
+ * rather than as a single marked day and then a blank.
  */
 class Whereabouts {
     public const META_ROTATION  = '_households_rotation';
@@ -31,6 +39,12 @@ class Whereabouts {
     public const PATTERN_CUSTOM             = 'custom';
 
     public const CYCLE_DAYS = 14;
+
+    /**
+     * The longest run of days one tap may say at once: the same horizon the
+     * board can show, because a run is said by tapping a day on it.
+     */
+    public const MAX_RUN_DAYS = 56;
 
     public const DEFAULT_CHANGEOVER_TIME = '17:00';
 
@@ -170,6 +184,22 @@ class Whereabouts {
 
     /** Say where someone is on a day, or take it back with a home ID of 0. */
     public static function set_override( int $person_id, string $date, int $home_id ): bool {
+        return self::set_override_run( $person_id, $date, 1, $home_id );
+    }
+
+    /**
+     * Say where someone is from a day onwards, for a run of days.
+     *
+     * A day said on its own is a swap; a run of them is a plan — where you
+     * will be for the days ahead, so the rest of the family can see it and
+     * work around it. Both are the same thing written down: days, said
+     * outright. The pattern is untouched either way, and picks up again the
+     * moment the run ends, which is why a run says how long it is rather than
+     * stretching off into a future nobody has thought about yet.
+     *
+     * A home ID of 0 hands the whole run back to the pattern.
+     */
+    public static function set_override_run( int $person_id, string $date, int $days, int $home_id ): bool {
         $date = self::normalize_date( $date );
         if ( '' === $date ) {
             return false;
@@ -177,25 +207,55 @@ class Whereabouts {
         if ( $home_id && ! Access::is_member( $person_id, $home_id ) ) {
             return false;
         }
+        $cursor = \DateTimeImmutable::createFromFormat( '!Y-m-d', $date );
+        if ( ! $cursor ) {
+            return false;
+        }
 
         $overrides = self::get_overrides( $person_id );
-        if ( $home_id ) {
-            $overrides[ $date ] = $home_id;
-        } else {
-            unset( $overrides[ $date ] );
+        $rotates = (bool) self::get_rotation( $person_id );
+        $days = max( 1, min( self::MAX_RUN_DAYS, $days ) );
+        for ( $i = 0; $i < $days; $i++ ) {
+            $day = $cursor->format( 'Y-m-d' );
+            // With a pattern behind them every day of the run has to be said,
+            // because the pattern answers for any day that is not. With no
+            // pattern, the first day is the whole statement — it stands until
+            // something else is said — so the rest of the run has only to
+            // clear anything that would have contradicted it.
+            if ( $home_id && ( 0 === $i || $rotates ) ) {
+                $overrides[ $day ] = $home_id;
+            } else {
+                unset( $overrides[ $day ] );
+            }
+            $cursor = $cursor->modify( '+1 day' );
         }
+        ksort( $overrides );
 
         update_post_meta( $person_id, self::META_OVERRIDES, $overrides );
         return true;
     }
 
-    /** Forget overrides in the past, so the list stays about what is ahead. */
+    /**
+     * Forget statements the calendar has moved past, so the list stays about
+     * what is ahead — all but the last one made before today, which with no
+     * pattern behind it is the statement still standing.
+     */
     public static function prune_overrides( int $person_id ): void {
         $today = self::today();
-        $overrides = array_filter( self::get_overrides( $person_id ), static function( string $date ) use ( $today ): bool {
-            return $date >= $today;
-        }, ARRAY_FILTER_USE_KEY );
-        update_post_meta( $person_id, self::META_OVERRIDES, $overrides );
+        $overrides = self::get_overrides( $person_id );
+        $standing = '';
+        foreach ( $overrides as $date => $home_id ) {
+            if ( (string) $date < $today ) {
+                $standing = (string) $date;
+            }
+        }
+        $kept = [];
+        foreach ( $overrides as $date => $home_id ) {
+            if ( (string) $date >= $today || (string) $date === $standing ) {
+                $kept[ $date ] = $home_id;
+            }
+        }
+        update_post_meta( $person_id, self::META_OVERRIDES, $kept );
     }
 
     /* ---------------------------------------------------------------- Lookups */
@@ -203,26 +263,52 @@ class Whereabouts {
     /**
      * Which home a person is at on a date.
      *
-     * @return array{home_id:int,is_override:bool}
+     * @return array{home_id:int,is_override:bool,is_carried:bool}
      */
     public static function home_on( int $person_id, string $date ): array {
         $date = self::normalize_date( $date );
         if ( '' === $date ) {
-            return [ 'home_id' => 0, 'is_override' => false ];
+            return [ 'home_id' => 0, 'is_override' => false, 'is_carried' => false ];
         }
 
         // What someone said about a day wins, and it stands on its own: a
         // statement about today needs no pattern behind it to be true.
         $overrides = self::get_overrides( $person_id );
         if ( isset( $overrides[ $date ] ) ) {
-            return [ 'home_id' => $overrides[ $date ], 'is_override' => true ];
+            return [ 'home_id' => $overrides[ $date ], 'is_override' => true, 'is_carried' => false ];
         }
 
         $rotation = self::get_rotation( $person_id );
-        return [
-            'home_id'     => $rotation ? self::home_from_cycle( $rotation, $date ) : self::only_home( $person_id ),
-            'is_override' => false,
-        ];
+        if ( $rotation ) {
+            return [ 'home_id' => self::home_from_cycle( $rotation, $date ), 'is_override' => false, 'is_carried' => false ];
+        }
+
+        // With no pattern to answer for the day, the last thing said still
+        // stands. Somebody who moved on Tuesday is still there on Wednesday:
+        // people do not stop being anywhere, and a blank where they plainly
+        // are is a worse answer than the one already given.
+        $carried = self::standing_before( $overrides, $date );
+        if ( $carried ) {
+            return [ 'home_id' => $carried, 'is_override' => false, 'is_carried' => true ];
+        }
+
+        return [ 'home_id' => self::only_home( $person_id ), 'is_override' => false, 'is_carried' => false ];
+    }
+
+    /**
+     * The home named by the last statement made before a date, or 0 when
+     * nothing was said before it. Statements are kept oldest first, so the
+     * last one that is not itself in the future is the one still standing.
+     */
+    private static function standing_before( array $overrides, string $date ): int {
+        $home_id = 0;
+        foreach ( $overrides as $said_on => $said_home ) {
+            if ( (string) $said_on >= $date ) {
+                break;
+            }
+            $home_id = (int) $said_home;
+        }
+        return $home_id;
     }
 
     /**
@@ -254,14 +340,21 @@ class Whereabouts {
         if ( ! $cursor ) {
             return [];
         }
+        // A statement made before the window still stands on its first day, so
+        // the board opens where the person actually is rather than at a blank.
+        $carried = $rotation ? 0 : self::standing_before( $overrides, $cursor->format( 'Y-m-d' ) );
         $out = [];
         for ( $i = 0; $i < max( 1, $days ); $i++ ) {
             $date = $cursor->format( 'Y-m-d' );
             $said = isset( $overrides[ $date ] );
+            if ( $said && ! $rotation ) {
+                $carried = (int) $overrides[ $date ];
+            }
             $out[] = [
                 'date'        => $date,
-                'home_id'     => $said ? $overrides[ $date ] : ( $rotation ? self::home_from_cycle( $rotation, $date ) : $only ),
+                'home_id'     => $said ? $overrides[ $date ] : ( $rotation ? self::home_from_cycle( $rotation, $date ) : ( $carried ?: $only ) ),
                 'is_override' => $said,
+                'is_carried'  => ! $said && ! $rotation && (bool) $carried,
             ];
             $cursor = $cursor->modify( '+1 day' );
         }

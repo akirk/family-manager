@@ -10,11 +10,15 @@ class App extends BaseApp {
         // See https://github.com/akirk/wp-app for documentation.
         $this->app = new WpApp( $this->get_template_dir(), $this->get_url_path(), [
             'require_login'       => true,
-            'show_wp_logo'        => true,
-            'show_site_name'      => true,
             'app_name'            => $this->get_plugin_name(),
             'app_name_textdomain' => 'households',
             'launcher'            => true,
+            // A roof in the launcher, in the terracotta the app already uses
+            // for its warm accent, so the tile and the pages agree.
+            'app_icon'            => 'dashicons-admin-home',
+            'app_icon_background' => 'linear-gradient(135deg, #9b5d2f, #d29561)',
+            'app_icon_color'      => '#fff',
+            'app_icon_shadow'     => true,
             // Owned content: REST reads are gated with the app's capability and
             // OpenStation keeps these menus out of its dock.
             'post_types'          => [ Access::PERSON, Storage::FACT, Storage::ITEM, Storage::TASK ],
@@ -470,7 +474,11 @@ class App extends BaseApp {
                 if ( $target && ! $this->put_person_at( $person_id, $target ) ) {
                     return $this->refuse();
                 }
-                Whereabouts::set_override( $person_id, $post( 'date' ), $target );
+                // One day, or that day and the ones after it: the board says
+                // how many when it is being tapped to plan a stay rather than
+                // swap a day. Either way it is days that are written down, so
+                // the pattern is left alone.
+                Whereabouts::set_override_run( $person_id, $post( 'date' ), $post( 'onwards', 'int' ) ?: 1, $target );
                 Whereabouts::prune_overrides( $person_id );
             }
             return $this->done();
