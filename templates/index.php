@@ -141,6 +141,7 @@ require __DIR__ . '/_head.php';
                         <?php
                         $hh_form_home = $hh_where['home_id'];
                         $hh_form_people = $hh_here['people'];
+                        $hh_form_homes = View::storage()->homes_you_organise( $hh_user );
                         $hh_form_shut = $hh_shut;
                         $hh_form_open = $hh_adding || $hh_form_task;
                         require __DIR__ . '/_task-form.php';

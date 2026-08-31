@@ -7,14 +7,17 @@
  * tells the two apart is whether it has a task in it. One form is one row of
  * buttons in one place, whichever of the two it is doing.
  *
- * Expects $hh_form_home. Takes $hh_form_people (who a task can be for),
- * $hh_form_task (the one being put right, if any), $hh_form_shut (the page with
- * the form closed, where putting one right posts to) and $hh_form_open.
+ * Expects $hh_form_home, the household the list is of. Takes $hh_form_people
+ * (who a task can be for), $hh_form_homes (the households it could be in, if
+ * there is a choice), $hh_form_task (the one being put right, if any),
+ * $hh_form_shut (the page with the form closed, where putting one right posts
+ * to) and $hh_form_open.
  */
 
 namespace Households;
 
 $hh_form_people = isset( $hh_form_people ) ? $hh_form_people : [];
+$hh_form_homes = isset( $hh_form_homes ) ? $hh_form_homes : [];
 $hh_form_task = ! empty( $hh_form_task ) ? $hh_form_task : [];
 $hh_form_shut = isset( $hh_form_shut ) ? $hh_form_shut : remove_query_arg( [ 'add', 'edit' ] );
 $hh_form_open = ! empty( $hh_form_open );
@@ -39,6 +42,19 @@ $hh_form_open = ! empty( $hh_form_open );
     <label class="wide"><?php echo esc_html__( 'What needs doing', 'households' ); ?>
         <input type="text" name="title" value="<?php echo $hh_form_task ? esc_attr( $hh_form_task['title'] ) : ''; ?>" required <?php echo $hh_form_open ? 'autofocus' : ''; ?>>
     </label>
+    <?php // Which household it is in is an answer like the rest, so a task written down in the wrong house is put right where it is read rather than in the house it should have been in. Asked only where there is more than one to name. ?>
+    <?php if ( count( $hh_form_homes ) > 1 ) : ?>
+        <label><?php echo esc_html__( 'Where', 'households' ); ?>
+            <select name="to_home_id">
+                <?php foreach ( $hh_form_homes as $hh_form_elsewhere ) : ?>
+                    <option value="<?php echo (int) $hh_form_elsewhere['id']; ?>" <?php selected( $hh_form_elsewhere['id'], $hh_form_home ); ?>>
+                        <?php echo esc_html( $hh_form_elsewhere['name'] ); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+    <?php endif; ?>
+    <?php // Whoever it is for is somebody in the household it is in, so moving it to another leaves it for everybody there rather than for somebody who is not. ?>
     <label><?php echo esc_html__( 'For whom', 'households' ); ?>
         <select name="person_id">
             <option value="0"><?php echo esc_html__( 'Everyone', 'households' ); ?></option>

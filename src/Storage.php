@@ -120,6 +120,21 @@ class Storage {
         return array_values( $homes );
     }
 
+    /**
+     * The homes this user may write in, which is where a task can be put and
+     * where one already written down can be moved to.
+     *
+     * @return array[] named and ordered as the households list is.
+     */
+    public function homes_you_organise( int $user_id ): array {
+        return array_values( array_filter(
+            $this->get_homes_for_user( $user_id ),
+            static function( array $home ) use ( $user_id ): bool {
+                return Access::can_organise( $user_id, $home['id'] );
+            }
+        ) );
+    }
+
     /** @return array[] the homes this person belongs to, named and ordered. */
     public function get_homes_for_person( int $person_id ): array {
         $homes = array_filter( array_map( [ $this, 'get_home' ], Access::home_ids_for_person( $person_id ) ) );
@@ -1275,7 +1290,7 @@ class Storage {
      * left blank is blank on purpose: the form says all of it every time, so a
      * date taken off is a date taken off rather than a field not mentioned.
      */
-    public function edit_task( int $home_id, int $task_id, string $title, int $person_id = 0, string $task_type = 'task', string $due_date = '' ): bool {
+    public function edit_task( int $home_id, int $task_id, string $title, int $person_id = 0, string $task_type = 'task', string $due_date = '', int $to_home_id = 0 ): bool {
         $post = get_post( $task_id );
         if ( ! $post || self::TASK !== $post->post_type || ! in_array( $home_id, $this->home_ids_of_post( $task_id ), true ) ) {
             return false;
@@ -1284,8 +1299,18 @@ class Storage {
         if ( '' === trim( $title ) ) {
             return false;
         }
-        if ( $person_id && ! Access::is_member( $person_id, $home_id ) ) {
+        // Which household it is in is one of the answers, so a task written
+        // down in the wrong house is put right the same way a misspelt one is.
+        // Everything else is then true of the house it has moved to: whoever it
+        // is for has to be somebody there, and nobody is who it is for
+        // otherwise.
+        $moved = $to_home_id && $to_home_id !== $home_id && $this->get_home( $to_home_id ) ? $to_home_id : 0;
+        $lives_in = $moved ?: $home_id;
+        if ( $person_id && ! Access::is_member( $person_id, $lives_in ) ) {
             $person_id = 0;
+        }
+        if ( $moved ) {
+            wp_set_object_terms( $task_id, [ $moved ], Access::TAXONOMY );
         }
         wp_update_post( [
             'ID'          => $task_id,
