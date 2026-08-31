@@ -74,10 +74,10 @@ require __DIR__ . '/_head.php';
                         </h2>
                         <?php if ( $hh_where['known'] ) : ?>
                             <div class="actions">
-                                <?php // Everybody's by default, because a household's list is not a private one. ?>
-                                <a class="pill<?php echo $hh_mine ? ' on' : ''; ?>"
+                                <?php // Everybody's by default, because a household's list is not a private one. The pill says the list it would give you, not the one you are reading. ?>
+                                <a class="pill" data-hh-live
                                     href="<?php echo esc_url( $hh_mine ? remove_query_arg( 'mine', $hh_url ) : add_query_arg( 'mine', 1, $hh_url ) ); ?>">
-                                    <?php echo esc_html__( 'just mine', 'households' ); ?>
+                                    <?php echo $hh_mine ? esc_html__( 'everyone', 'households' ) : esc_html__( 'just me', 'households' ); ?>
                                 </a>
                                 <?php if ( $hh_can_add ) : ?>
                                     <?php // A link that asks the page for the form; the script opens the one already here instead. ?>
@@ -300,12 +300,13 @@ require __DIR__ . '/_head.php';
 <script>
 /*
  * The list already works without this. The + is a link asking for the page with
- * the form open, ticking something is a form, and writing something down posts
- * and comes back to a page read afresh. All the script does is spare the page
- * going away and coming back: the form is already here, so opening it is a
- * class rather than a request, and everything posted is posted to the same URL
- * with the sections the server rendered in reply put back in. Nothing is worked
- * out here that the server has not worked out already.
+ * the form open, whose list it is is another, ticking something is a form, and
+ * writing something down posts and comes back to a page read afresh. All the
+ * script does is spare the page going away and coming back: the form is already
+ * here, so showing it is an attribute rather than a request, and everything
+ * asked for is asked of the same URLs, with the sections the server rendered in
+ * reply put back in. Nothing is worked out here that the server has not worked
+ * out already.
  */
 ( function () {
     var live = [ 'hh-todo', 'hh-agenda' ];
@@ -314,6 +315,11 @@ require __DIR__ . '/_head.php';
     }
 
     function swap( html ) {
+        // The server has no idea the form is open — that is not in the URL and
+        // does not belong there — so what came back has it shut, and it is put
+        // back the way it was found.
+        var form = document.getElementById( 'add' );
+        var was = form && ! form.hidden;
         var fresh = new DOMParser().parseFromString( html, 'text/html' );
         live.forEach( function ( id ) {
             var here = document.getElementById( id );
@@ -322,12 +328,30 @@ require __DIR__ . '/_head.php';
                 here.replaceWith( came );
             }
         } );
+        if ( was ) {
+            reveal( true );
+        }
     }
 
-    function load( form ) {
+    /** Show the form, or hide it, and leave the + saying what it would do next. */
+    function reveal( show ) {
+        var form = document.getElementById( 'add' );
+        var link = document.querySelector( '#hh-todo a[data-hh-add]' );
+        if ( ! form || ! link ) {
+            return;
+        }
+        form.hidden = ! show;
+        link.textContent = show ? '\u00d7' : '+';
+        link.setAttribute( 'aria-expanded', show ? 'true' : 'false' );
+        link.href = link.getAttribute( show ? 'data-hh-close' : 'data-hh-open' );
+    }
+
+    function load( url, form ) {
         var busy = document.getElementById( 'hh-todo' );
         busy.setAttribute( 'aria-busy', 'true' );
-        fetch( window.location.href, { method: 'POST', body: new FormData( form ), credentials: 'same-origin' } )
+        fetch( url, form
+            ? { method: 'POST', body: new FormData( form ), credentials: 'same-origin' }
+            : { credentials: 'same-origin' } )
             .then( function ( response ) {
                 if ( ! response.ok ) {
                     throw new Error( String( response.status ) );
@@ -337,8 +361,11 @@ require __DIR__ . '/_head.php';
             .then( function ( html ) {
                 swap( html );
                 // Written down and gone from the fields: the next one is
-                // expected, so the cursor is left where it was.
-                var again = document.querySelector( '#hh-todo form#add:not([hidden]) input[name="title"]' );
+                // expected, so the cursor is put back where it was. Ticking
+                // something off is not that, and takes no cursor anywhere.
+                var again = form && 'add' === form.id
+                    ? document.querySelector( '#hh-todo form#add:not([hidden]) input[name="title"]' )
+                    : null;
                 if ( again ) {
                     again.focus();
                 }
@@ -346,7 +373,11 @@ require __DIR__ . '/_head.php';
             // Anything unexpected hands the page back to the browser, which has
             // known how to do this all along.
             .catch( function () {
-                form.submit();
+                if ( form ) {
+                    form.submit();
+                } else {
+                    window.location.href = url;
+                }
             } );
     }
 
@@ -358,9 +389,23 @@ require __DIR__ . '/_head.php';
             return;
         }
         event.preventDefault();
-        load( form );
+        load( window.location.href, form );
     } );
 
+    // Whose list it is is a link like any other; it is only the page around it
+    // that need not be fetched again to answer it.
+    document.addEventListener( 'click', function ( event ) {
+        var link = event.target.closest( '#hh-todo a[data-hh-live]' );
+        if ( ! link ) {
+            return;
+        }
+        event.preventDefault();
+        window.history.replaceState( {}, '', link.href );
+        load( link.href, null );
+    } );
+
+    // Opening the form changes nothing anybody could be sent or reload into, so
+    // it changes nothing about the URL either. It is a form being shown.
     document.addEventListener( 'click', function ( event ) {
         var link = event.target.closest( '#hh-todo a[data-hh-add]' );
         var form = document.getElementById( 'add' );
@@ -369,13 +414,7 @@ require __DIR__ . '/_head.php';
         }
         event.preventDefault();
         var opening = form.hidden;
-        form.hidden = ! opening;
-        link.textContent = opening ? '\u00d7' : '+';
-        link.setAttribute( 'aria-expanded', opening ? 'true' : 'false' );
-        // Whether the form is open is kept in the URL, so a reload leaves it as
-        // it was and the link keeps pointing at the state it is not in.
-        window.history.replaceState( {}, '', opening ? link.getAttribute( 'data-hh-open' ) : link.getAttribute( 'data-hh-close' ) );
-        link.href = opening ? link.getAttribute( 'data-hh-close' ) : link.getAttribute( 'data-hh-open' );
+        reveal( opening );
         if ( opening ) {
             var title = form.querySelector( 'input[name="title"]' );
             if ( title ) {
