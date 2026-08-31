@@ -203,6 +203,7 @@ $hh_quiet = $hh_sifted['quiet'];
                 <?php foreach ( $hh['items'] as $hh_thing ) : ?>
                     <?php
                     $hh_thing_home = $hh['home']['id'];
+                    $hh_thing_at_said = true;
                     $hh_thing_writing = $hh_writing;
                     $hh_thing_going_said = false;
                     ?>

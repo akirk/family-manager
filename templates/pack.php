@@ -104,6 +104,7 @@ require __DIR__ . '/_head.php';
                         // it and the line says only what the thing is and, from
                         // the house it is leaving, where in it to find it.
                         $hh_thing_home = $hh_route['from_name'] ? $hh_route['from_id'] : 0;
+                        $hh_thing_at_said = true;
                         $hh_thing_writing = true;
                         $hh_thing_going_said = true;
                         ?>

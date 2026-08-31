@@ -12,8 +12,11 @@
  * at a time that reads as it being in several — unless this is not one of
  * those houses at all, and the thing is only here, in which case where it
  * belongs is the one thing worth saying. Across households, where no heading
- * has said anything, each house of yours that has a place for it says so with
- * its own line. $hh_thing_writing says whether this page offers anything to be said at
+ * has said anything, the line says which house it is at and where in that
+ * house it should be, and nothing else: a list read with no heading over it is
+ * a list being read to find something. $hh_thing_at_said says a heading has
+ * already answered where it is, however it answered — a household of yours, or
+ * that it is somewhere that is not. $hh_thing_writing says whether this page offers anything to be said at
  * all — a household read as somebody else is being read rather than organised,
  * and a list on the overview is a shelf being looked at. $hh_thing_going_said
  * is for a heading that is itself a trip and has named where it is going.
@@ -50,8 +53,19 @@ foreach ( $hh_thing['homes'] as $hh_thing_one ) {
 // yours.
 $hh_thing_at = ! empty( $hh_thing['at'] ) ? $hh_thing['at'] : [];
 $hh_thing_at_away = ! empty( $hh_thing_at['home_id'] ) && $hh_thing_at['home_id'] !== $hh_thing_home;
-$hh_thing_at_worth = $hh_thing_at_away && ( $hh_thing_home || ! $hh_thing_at['kept'] || count( $hh_thing['homes'] ) > 1 );
+$hh_thing_at_worth = $hh_thing_at_away && $hh_thing_home;
 $hh_thing_at_named = $hh_thing_at_worth && Access::can_reach( View::user_id(), $hh_thing_at['home_id'] );
+
+// Read with no heading over it, a thing is one line answering the two things
+// asked of it: which house it is at, and where in that house it should be.
+// Which houses would have it elsewhere is the thing's own page's to say.
+$hh_thing_at_mine = ! empty( $hh_thing_at['home_id'] ) && Access::can_reach( View::user_id(), $hh_thing_at['home_id'] );
+$hh_thing_at_where = '';
+foreach ( $hh_thing_at_mine ? $hh_thing['homes'] : [] as $hh_thing_one ) {
+    if ( $hh_thing_one['id'] === $hh_thing_at['home_id'] ) {
+        $hh_thing_at_where = $hh_thing_one['where'];
+    }
+}
 
 // Where it is to get to, and the bag it is waiting in. A heading that is itself
 // a trip has said it already, and a household of somebody else's is not named
@@ -130,20 +144,9 @@ $hh_thing_tick = $hh_thing_writing
             <?php else : ?>
                 <div class="meta"><?php echo esc_html__( 'Kept somewhere that is not yours.', 'households' ); ?></div>
             <?php endif; ?>
-        <?php else : ?>
-            <?php foreach ( $hh_thing_also as $hh_thing_one ) : ?>
-                <div class="actions" style="margin-top:4px">
-                    <a class="pill" href="<?php echo esc_url( View::home_url( $hh_thing_one['id'] ) ); ?>">
-                        <?php
-                        /* translators: %s: the name of a household. */
-                        echo esc_html( sprintf( __( 'kept at %s', 'households' ), $hh_thing_one['name'] ) );
-                        ?>
-                    </a>
-                    <?php if ( $hh_thing_one['where'] ) : ?>
-                        <span class="meta"><?php echo esc_html( $hh_thing_one['where'] ); ?></span>
-                    <?php endif; ?>
-                </div>
-            <?php endforeach; ?>
+        <?php elseif ( $hh_thing_at_where ) : ?>
+            <?php // Where it should be at the house it is at, which is the only one of its places that is any use for finding it. ?>
+            <div class="meta"><?php echo esc_html( $hh_thing_at_where ); ?></div>
         <?php endif; ?>
         <?php if ( $hh_thing_at_named ) : ?>
             <div class="meta">
@@ -156,6 +159,21 @@ $hh_thing_tick = $hh_thing_writing
             <div class="meta"><?php echo esc_html__( 'It is not at any of your households just now.', 'households' ); ?></div>
         <?php endif; ?>
     </div>
+    <?php // Which house it is at, on the line the thing is on, because a list with no heading over it is a list being read to find something. ?>
+    <?php if ( ! $hh_thing_at_said ) : ?>
+        <?php if ( $hh_thing_at_mine ) : ?>
+            <a class="pill" href="<?php echo esc_url( View::home_url( $hh_thing_at['home_id'] ) ); ?>">
+                <?php
+                /* translators: %s: the name of a household. */
+                echo esc_html( sprintf( __( 'at %s', 'households' ), $hh_thing_at['name'] ) );
+                ?>
+            </a>
+        <?php elseif ( ! empty( $hh_thing_at['home_id'] ) ) : ?>
+            <span class="pill"><?php echo esc_html__( 'somewhere that is not yours', 'households' ); ?></span>
+        <?php else : ?>
+            <span class="pill"><?php echo esc_html__( 'nobody has said', 'households' ); ?></span>
+        <?php endif; ?>
+    <?php endif; ?>
     <?php // Where it is to go is a house on the line the thing is on, and a tick beside it where there is no box to say the same thing. The words are still there for anyone the arrow does not reach. ?>
     <?php if ( $hh_thing_goes_named ) : ?>
         <?php $hh_thing_goes_here = $hh_thing_goes['home_id'] === $hh_thing_home; ?>
