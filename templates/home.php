@@ -31,12 +31,17 @@ $hh_writing = $hh_can_organise && ! $hh['viewer']['viewing_as'];
 $hh_earlier = ! empty( $_GET['earlier'] );
 $hh_adding = ! empty( $_GET['add'] );
 $hh_editing = isset( $_GET['edit'] ) ? (int) $_GET['edit'] : 0;
+// What this house knows about itself is asked the same way, in its own word so
+// that opening one form is not opening the other: a fact to put right by its
+// number, or a new one.
+$hh_facting = isset( $_GET['fact'] ) ? sanitize_key( wp_unslash( $_GET['fact'] ) ) : '';
 // phpcs:enable WordPress.Security.NonceVerification.Recommended
 $hh_url = remove_query_arg( 'problem' );
-// The page with the form shut, which is where a form opened by the URL posts
+// The page with every form shut, which is where a form opened by the URL posts
 // back to and what the way out of it points at.
-$hh_shut = remove_query_arg( [ 'add', 'edit' ], $hh_url );
+$hh_shut = remove_query_arg( [ 'add', 'edit', 'fact' ], $hh_url );
 $hh_open = add_query_arg( 'add', 1, $hh_shut );
+$hh_fact_new = add_query_arg( 'fact', 'new', $hh_shut );
 // What is here, which is not everything the house keeps: a thing that lives
 // here and has gone somewhere else is not on the shelf to be found. Where it
 // has got to is said on its own page, and at the household it is at, which is
@@ -61,6 +66,15 @@ foreach ( $hh_tasks as $hh_task ) {
         $hh_form_task = $hh_task;
     }
 }
+// And the same question about the house itself: which fact the form has, if it
+// has one, and whether it is open at all.
+$hh_fact_note = [];
+foreach ( $hh['facts'] as $hh_fact ) {
+    if ( (string) $hh_fact['id'] === $hh_facting ) {
+        $hh_fact_note = $hh_fact;
+    }
+}
+$hh_fact_showing = $hh_writing && ( 'new' === $hh_facting || $hh_fact_note );
 ?>
         <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Overview', 'households' ); ?></a>
         <h1><?php echo esc_html( $hh['home']['name'] ); ?></h1>
@@ -157,31 +171,43 @@ foreach ( $hh_tasks as $hh_task ) {
             <div class="row heading">
                 <h2><?php echo esc_html__( 'About this household', 'households' ); ?></h2>
                 <?php if ( $hh_writing ) : ?>
-                    <details class="add">
-                        <summary><?php echo esc_html__( '+ Add', 'households' ); ?></summary>
-                        <form method="post" class="grid">
-                            <?php View::fields( 'add_note', [ 'kind' => 'fact' ] ); ?>
-                            <label><?php echo esc_html__( 'Label', 'households' ); ?><input type="text" name="title" required></label>
-                            <label class="wide"><?php echo esc_html__( 'Detail', 'households' ); ?><input type="text" name="detail"></label>
-                            <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-                        </form>
-                    </details>
+                    <?php // The same pill the list of things to do has, over a form of the same shape: a note about the house is written down the way anything else here is. ?>
+                    <a class="pill" href="<?php echo esc_url( $hh_fact_showing ? $hh_shut : $hh_fact_new ); ?>"
+                        aria-controls="fact" aria-expanded="<?php echo $hh_fact_showing ? 'true' : 'false'; ?>"
+                        aria-label="<?php echo esc_attr__( 'Write something down about this household', 'households' ); ?>"><?php echo $hh_fact_showing ? '&times;' : '+'; ?></a>
                 <?php elseif ( ! $hh['facts'] ) : ?>
                     <span class="meta"><?php echo esc_html__( 'Nothing written down yet.', 'households' ); ?></span>
                 <?php endif; ?>
             </div>
+            <?php if ( $hh_writing ) : ?>
+                <?php
+                $hh_fact_shut = $hh_shut;
+                $hh_fact_open = $hh_fact_showing;
+                require __DIR__ . '/_fact-form.php';
+                ?>
+            <?php endif; ?>
             <ul class="plain">
                 <?php foreach ( $hh['facts'] as $hh_note ) : ?>
+                    <?php $hh_note_is_open = $hh_writing && (string) $hh_note['id'] === $hh_facting; ?>
                     <li class="row">
                         <div class="grow">
                             <strong><?php echo esc_html( $hh_note['title'] ); ?></strong>
-                            <div class="meta"><?php echo esc_html( $hh_note['detail'] ); ?></div>
+                            <?php if ( '' !== trim( (string) $hh_note['detail'] ) ) : ?>
+                                <?php // A note is prose, and reads as it was typed. ?>
+                                <p class="note" style="margin:2px 0 0"><?php echo esc_html( $hh_note['detail'] ); ?></p>
+                            <?php endif; ?>
                         </div>
                         <?php if ( $hh_writing ) : ?>
-                            <form method="post">
-                                <?php View::fields( 'remove_note', [ 'kind' => 'fact', 'note_id' => $hh_note['id'] ] ); ?>
-                                <button type="submit" class="quiet"><?php echo esc_html__( 'Remove', 'households' ); ?></button>
-                            </form>
+                            <div class="actions">
+                                <?php // Waiting to be pointed at, like the rows above: the form it opens is the one over the list, and pressing it again is the way back out. ?>
+                                <a class="pill onhover<?php echo $hh_note_is_open ? ' on' : ''; ?>"
+                                    href="<?php echo esc_url( $hh_note_is_open ? $hh_shut : add_query_arg( 'fact', $hh_note['id'], $hh_shut ) ); ?>"
+                                    aria-label="<?php echo esc_attr( sprintf(
+                                        /* translators: %s: what a note is labelled. */
+                                        __( 'Edit “%s”', 'households' ),
+                                        $hh_note['title']
+                                    ) ); ?>"><?php echo esc_html__( 'edit', 'households' ); ?></a>
+                            </div>
                         <?php endif; ?>
                     </li>
                 <?php endforeach; ?>
