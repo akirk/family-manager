@@ -112,6 +112,11 @@ $hh_title = isset( $hh_title ) && '' !== trim( $hh_title ) ? $hh_title : __( 'Ho
         .pill { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px; background: color-mix(in srgb, var(--hh-accent) 12%, transparent); color: var(--hh-accent-strong); font-size: 0.76rem; font-weight: 700; white-space: nowrap; }
         .pill.warm { background: color-mix(in srgb, var(--hh-warm) 16%, transparent); color: var(--hh-warm); }
         .empty { color: var(--hh-muted); border: 1px dashed var(--hh-line); border-radius: 6px; padding: 16px; text-align: center; }
+        /* A question with its answers beside it: the one you are reading is
+           said rather than offered, so there is nothing to press that would
+           leave you where you already are. */
+        .choose { display: inline-flex; align-items: baseline; gap: 8px; font-size: 0.9rem; }
+        .choose .meta::after { content: ":"; }
         button, .button { min-height: 38px; padding: 0 12px; border: 1px solid var(--hh-accent-strong); border-radius: 6px; background: transparent; color: var(--hh-accent-strong); font: inherit; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
         button.primary, .button.primary { background: var(--hh-accent); border-color: var(--hh-accent); color: #fff; }
         button.quiet, .button.quiet { border-color: var(--hh-line); color: var(--hh-muted); font-weight: 400; }

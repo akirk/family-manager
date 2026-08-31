@@ -190,13 +190,13 @@ require __DIR__ . '/_head.php';
                                     <?php
                                     echo esc_html( sprintf(
                                         /* translators: %s: the name of a household. */
-                                        __( 'Things kept at %s', 'households' ),
+                                        __( 'Things at %s', 'households' ),
                                         $hh_where['name']
                                     ) );
                                     ?>
                                 </a>
                             <?php else : ?>
-                                <?php echo esc_html__( 'Things kept where you are', 'households' ); ?>
+                                <?php echo esc_html__( 'Things', 'households' ); ?>
                             <?php endif; ?>
                         </h2>
                         <div class="actions">
