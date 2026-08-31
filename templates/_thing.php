@@ -12,7 +12,7 @@ namespace Households;
 ?>
 <li class="row">
     <div class="grow">
-        <strong><?php echo esc_html( $hh_thing['title'] ); ?></strong>
+        <strong><a href="<?php echo esc_url( View::thing_url( $hh_thing['id'] ) ); ?>"><?php echo esc_html( $hh_thing['title'] ); ?></a></strong>
         <?php if ( $hh_thing['detail'] ) : ?>
             <div class="meta"><?php echo esc_html( $hh_thing['detail'] ); ?></div>
         <?php endif; ?>

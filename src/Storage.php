@@ -445,6 +445,33 @@ class Storage {
         return $notes;
     }
 
+    /**
+     * One note by ID, with the household it is at — or nothing at all, if that
+     * is not what the ID is.
+     *
+     * A note is in one household, which is what makes a page of its own
+     * possible: there is exactly one answer to where it is.
+     */
+    public function get_note( int $post_id, string $post_type ): array {
+        $post = $post_id ? get_post( $post_id ) : null;
+        if ( ! $post || $post_type !== $post->post_type ) {
+            return [];
+        }
+        $home_ids = $this->home_ids_of_post( $post_id );
+        $home = $home_ids ? $this->get_home( $home_ids[0] ) : [];
+        if ( ! $home ) {
+            return [];
+        }
+        return [
+            'id'        => (int) $post->ID,
+            'title'     => $post->post_title,
+            'detail'    => $post->post_content,
+            'modified'  => $post->post_modified,
+            'home_id'   => (int) $home['id'],
+            'home_name' => $home['name'],
+        ];
+    }
+
     private function note_belongs_to( int $post_id, string $post_type, int $home_id ): bool {
         $post = get_post( $post_id );
         return $post && $post_type === $post->post_type && in_array( $home_id, $this->home_ids_of_post( $post_id ), true );

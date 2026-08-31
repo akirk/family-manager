@@ -182,7 +182,7 @@ $hh_writing = $hh_can_organise && ! $hh['viewer']['viewing_as'];
                 <?php foreach ( $hh['items'] as $hh_note ) : ?>
                     <li class="row">
                         <div class="grow">
-                            <strong><?php echo esc_html( $hh_note['title'] ); ?></strong>
+                            <strong><a href="<?php echo esc_url( View::thing_url( $hh_note['id'] ) ); ?>"><?php echo esc_html( $hh_note['title'] ); ?></a></strong>
                             <div class="meta"><?php echo esc_html( $hh_note['detail'] ); ?></div>
                         </div>
                         <?php if ( $hh_writing ) : ?>

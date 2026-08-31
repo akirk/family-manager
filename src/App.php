@@ -87,6 +87,8 @@ class App extends BaseApp {
         $this->app->route( 'things', 'things.php' );
         // A person, and what travels with them between homes.
         $this->app->route( 'person/{person_id}', 'person.php' );
+        // One thing: what it is, where it lives, and which household it is at.
+        $this->app->route( 'thing/{note_id}', 'thing.php' );
         // One home: its people, tasks, facts and things.
         $this->app->route( '{id}', 'home.php' );
         // Managing that home: who is in it, who administers it, its name.
@@ -628,6 +630,10 @@ class App extends BaseApp {
                     return $this->refuse();
                 }
                 $this->storage->remove_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'note_id', 'int' ) );
+                // Removed from its own page, there is no page to go back to.
+                if ( (int) get_query_var( 'note_id' ) ) {
+                    return $this->done( home_url( '/' . $this->get_url_path() . '/things/' ) );
+                }
                 break;
         }
 

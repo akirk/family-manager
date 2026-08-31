@@ -161,7 +161,7 @@ require __DIR__ . '/_head.php';
                         <?php foreach ( isset( $hh_here['items'] ) ? $hh_here['items'] : [] as $hh_thing ) : ?>
                             <li class="row">
                                 <div class="grow">
-                                    <strong><?php echo esc_html( $hh_thing['title'] ); ?></strong>
+                                    <strong><a href="<?php echo esc_url( View::thing_url( $hh_thing['id'] ) ); ?>"><?php echo esc_html( $hh_thing['title'] ); ?></a></strong>
                                     <?php if ( $hh_thing['detail'] ) : ?>
                                         <div class="meta"><?php echo esc_html( $hh_thing['detail'] ); ?></div>
                                     <?php endif; ?>
@@ -182,17 +182,6 @@ require __DIR__ . '/_head.php';
                         <p class="meta"><?php echo esc_html__( 'You are not in any of these households yourself, so there is nothing here about your day. Add yourself to one and this page fills in.', 'households' ); ?></p>
                     <?php elseif ( ! $hh_where['known'] ) : ?>
                         <p class="meta"><?php echo esc_html__( 'Nothing says where you are today. Open one and say — it counts for today alone.', 'households' ); ?></p>
-                    <?php elseif ( $hh_where['until'] && $hh_where['next_name'] ) : ?>
-                        <p class="meta">
-                            <?php
-                            printf(
-                                /* translators: 1: a date, 2: the name of a household. */
-                                esc_html__( 'Here until %1$s, then %2$s.', 'households' ),
-                                esc_html( $hh_where['until_label'] ),
-                                esc_html( $hh_where['next_name'] )
-                            );
-                            ?>
-                        </p>
                     <?php endif; ?>
                     <ul class="plain homes">
                         <?php foreach ( $hh_homes as $hh_home ) : ?>
