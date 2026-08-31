@@ -313,10 +313,11 @@ require __DIR__ . '/_head.php';
                 </section>
 
                 <section id="hh-agenda" data-hh-live-section>
+                    <?php // The fortnight as it happens to you: hours somebody else has claimed, days people move, and birthdays. Not a second copy of the list to the left of it — what is to be done is read in the house it is to be done in. ?>
                     <h2><a href="<?php echo esc_url( View::base() . 'where/' ); ?>"><?php echo esc_html__( 'People', 'households' ); ?></a></h2>
                     <ul class="plain">
                         <?php if ( ! $hh_day['agenda'] ) : ?>
-                            <li class="empty"><?php echo esc_html__( 'Nothing due, nobody moving, no birthdays in the next fortnight.', 'households' ); ?></li>
+                            <li class="empty"><?php echo esc_html__( 'Nothing booked, nobody moving, no birthdays in the next fortnight.', 'households' ); ?></li>
                         <?php endif; ?>
                         <?php foreach ( $hh_day['agenda'] as $hh_entry ) : ?>
                             <?php
@@ -334,11 +335,10 @@ require __DIR__ . '/_head.php';
                                     $hh_entry['home_name']
                                 );
                             } else {
+                                // An appointment, and nothing else reaches here:
+                                // whose hour it is is the only thing left to say.
                                 /* translators: %s: a name. */
                                 $hh_meta = $hh_entry['who'] ? sprintf( __( 'for %s', 'households' ), $hh_entry['who'] ) : __( 'for the household', 'households' );
-                                if ( 'appointment' === $hh_entry['kind'] ) {
-                                    $hh_meta .= ' · ' . __( 'appointment', 'households' );
-                                }
                             }
                             ?>
                             <li class="row">
