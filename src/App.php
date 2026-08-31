@@ -630,10 +630,13 @@ class App extends BaseApp {
                 if ( ! $can_organise ) {
                     return $this->refuse();
                 }
-                // A form that says nothing about the note leaves it alone,
-                // which is how the pages that never ask about it are safe.
+                // A form that says nothing about a field leaves it alone, which
+                // is how the pages that never ask about it are safe. A thing's
+                // page asks about where it lives one household at a time, so it
+                // does not ask here.
+                $detail = isset( $_POST['detail'] ) ? $post( 'detail', 'raw' ) : null;
                 $note = isset( $_POST['note'] ) ? $post( 'note', 'raw' ) : null;
-                $this->storage->update_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'note_id', 'int' ), $post( 'title' ), $post( 'detail', 'raw' ), $note );
+                $this->storage->update_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'note_id', 'int' ), $post( 'title' ), $detail, $note );
                 break;
 
             case 'restore_note':
@@ -641,6 +644,33 @@ class App extends BaseApp {
                     return $this->refuse();
                 }
                 $this->storage->restore_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'note_id', 'int' ), $post( 'revision_id', 'int' ) );
+                break;
+
+            // Kept at one more household, or said afresh where it lives at one
+            // it is already kept at. The household the line is about is the
+            // household the form names, so it is that one's permission that is
+            // asked for — and the thing has to be one the viewer could open,
+            // or any post ID would do to put anything in a house of theirs.
+            //
+            // Things only: a fact is true of one house, and a house that is not
+            // being told anything is not one to add it to.
+            case 'keep_note_at':
+            case 'drop_note_at':
+                $kind = $this->note_type( $post( 'kind', 'key' ) );
+                $note_id = $post( 'note_id', 'int' );
+                if ( Storage::ITEM !== $kind || ! $can_organise || ! $this->storage->may_reach_note( $user_id, $note_id, $kind ) ) {
+                    return $this->refuse();
+                }
+                if ( 'keep_note_at' === $action ) {
+                    $this->storage->keep_note_at( $home_id, $kind, $note_id, $post( 'where', 'raw' ) );
+                    break;
+                }
+                $this->storage->drop_note_at( $home_id, $kind, $note_id );
+                // Dropped the last household of yours that kept it, and the
+                // page you are on is one you can no longer open.
+                if ( (int) get_query_var( 'note_id' ) && ! $this->storage->may_reach_note( $user_id, $note_id, $kind ) ) {
+                    return $this->done( home_url( '/' . $this->get_url_path() . '/things/' ) );
+                }
                 break;
 
             case 'move_note':

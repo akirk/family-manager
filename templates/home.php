@@ -197,24 +197,53 @@ $hh_quiet = $hh_sifted['quiet'];
             </div>
             <ul class="plain">
                 <?php foreach ( $hh['items'] as $hh_note ) : ?>
+                    <?php
+                    // The households of yours that keep it as well: said on the
+                    // line, so it is clear this is not the only place it is, and
+                    // taken out of the ones it could be handed to.
+                    $hh_also = [];
+                    $hh_targets = [];
+                    foreach ( $hh['homes'] as $hh_other ) {
+                        if ( $hh_other['id'] === $hh['home']['id'] ) {
+                            continue;
+                        }
+                        if ( in_array( $hh_other['id'], $hh_note['home_ids'], true ) ) {
+                            $hh_also[] = $hh_other;
+                        } else {
+                            $hh_targets[] = $hh_other;
+                        }
+                    }
+                    ?>
                     <li class="row">
                         <div class="grow">
                             <strong><a href="<?php echo esc_url( View::thing_url( $hh_note['id'] ) ); ?>"><?php echo esc_html( $hh_note['title'] ); ?></a></strong>
-                            <div class="meta"><?php echo esc_html( $hh_note['detail'] ); ?></div>
-                        </div>
-                        <?php if ( $hh_writing ) : ?>
-                            <?php // A thing is somewhere rather than nowhere: it moves to another home instead of being taken off the list. ?>
-                            <form method="post" class="actions">
-                                <?php View::fields( 'move_note', [ 'kind' => 'item', 'note_id' => $hh_note['id'] ] ); ?>
-                                <?php foreach ( $hh['homes'] as $hh_other ) : ?>
-                                    <?php if ( $hh_other['id'] !== $hh['home']['id'] ) : ?>
-                                        <button type="submit" class="quiet" name="target_home_id" value="<?php echo (int) $hh_other['id']; ?>">
+                            <?php if ( $hh_note['detail'] ) : ?>
+                                <div class="meta"><?php echo esc_html( $hh_note['detail'] ); ?></div>
+                            <?php endif; ?>
+                            <?php if ( $hh_also ) : ?>
+                                <div class="actions" style="margin-top:4px">
+                                    <?php foreach ( $hh_also as $hh_other ) : ?>
+                                        <a class="pill" href="<?php echo esc_url( View::home_url( $hh_other['id'] ) ); ?>">
                                             <?php
                                             /* translators: %s: the name of a household. */
-                                            echo esc_html( sprintf( __( 'Move to %s', 'households' ), $hh_other['name'] ) );
+                                            echo esc_html( sprintf( __( 'also at %s', 'households' ), $hh_other['name'] ) );
                                             ?>
-                                        </button>
-                                    <?php endif; ?>
+                                        </a>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                        <?php if ( $hh_writing && $hh_targets ) : ?>
+                            <?php // A thing is somewhere rather than nowhere: it moves to another home instead of being taken off the list. Where it lives goes with it, to be said again in the house it arrives at. ?>
+                            <form method="post" class="actions">
+                                <?php View::fields( 'move_note', [ 'kind' => 'item', 'note_id' => $hh_note['id'] ] ); ?>
+                                <?php foreach ( $hh_targets as $hh_other ) : ?>
+                                    <button type="submit" class="quiet" name="target_home_id" value="<?php echo (int) $hh_other['id']; ?>">
+                                        <?php
+                                        /* translators: %s: the name of a household. */
+                                        echo esc_html( sprintf( __( 'Move to %s', 'households' ), $hh_other['name'] ) );
+                                        ?>
+                                    </button>
                                 <?php endforeach; ?>
                             </form>
                         <?php endif; ?>

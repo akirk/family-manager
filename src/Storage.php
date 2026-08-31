@@ -27,6 +27,9 @@ class Storage {
     public const META_BIRTHDATE = '_households_birthdate';
     public const META_LAST_HOME = '_households_last_home';
 
+    /** Item meta. */
+    public const META_WHERE = '_households_where';
+
     /** Task meta. */
     public const META_TASK_TYPE = '_households_task_type';
     public const META_DUE_DATE  = '_households_due_date';
@@ -375,40 +378,109 @@ class Storage {
      * the wifi network, where the water main valve is, which day the bins go
      * out. An item is a thing kept there. Both keep their history, because both
      * are posts and both are edited in place rather than replaced.
+     *
+     * They part company over the detail. A fact is one house's, so it is the
+     * post's own content. A thing can be kept in several, and is in a different
+     * place in each, so where it lives is written against the household.
      */
     public function add_note( int $home_id, string $post_type, string $title, string $detail ): int {
         $title = sanitize_text_field( $title );
         if ( '' === trim( $title ) || ! $this->get_home( $home_id ) ) {
             return 0;
         }
+        $item = self::ITEM === $post_type;
         $post_id = (int) wp_insert_post( [
-            'post_content' => wp_kses_post( $detail ),
+            'post_content' => $item ? '' : wp_kses_post( $detail ),
             'post_status'  => 'private',
             'post_title'   => $title,
             'post_type'    => $post_type,
         ] );
         if ( $post_id ) {
             wp_set_object_terms( $post_id, [ $home_id ], Access::TAXONOMY );
+            if ( $item ) {
+                $this->set_where( $post_id, $home_id, $detail );
+            }
         }
         return $post_id;
     }
 
-    public function update_note( int $home_id, string $post_type, int $post_id, string $title, string $detail, ?string $note = null ): bool {
+    /**
+     * Said nothing about a field and the field is left alone: a form that does
+     * not carry the note, or where it lives, is not a form emptying it.
+     */
+    public function update_note( int $home_id, string $post_type, int $post_id, string $title, ?string $detail = null, ?string $note = null ): bool {
         if ( ! $this->note_belongs_to( $post_id, $post_type, $home_id ) || '' === trim( $title ) ) {
             return false;
         }
         $fields = [
-            'ID'           => $post_id,
-            'post_content' => wp_kses_post( $detail ),
-            'post_title'   => sanitize_text_field( $title ),
+            'ID'         => $post_id,
+            'post_title' => sanitize_text_field( $title ),
         ];
-        // Said nothing about the note and the note is left alone; a form that
-        // does not carry it is not a form emptying it.
+        if ( null !== $detail ) {
+            if ( self::ITEM === $post_type ) {
+                $this->set_where( $post_id, $home_id, $detail );
+            } else {
+                $fields['post_content'] = wp_kses_post( $detail );
+            }
+        }
         if ( null !== $note ) {
             $fields['post_excerpt'] = wp_kses_post( $note );
         }
         wp_update_post( $fields );
         return true;
+    }
+
+    /**
+     * Where a thing lives, household by household.
+     *
+     * The same thing is kept in a different place in each house it is in — on
+     * the hook by the door at one, in the kitchen drawer at the other — so the
+     * line is written against the household rather than against the thing.
+     *
+     * @return array<int,string> home id to what is written there.
+     */
+    private function where_kept( int $post_id ): array {
+        $stored = get_post_meta( $post_id, self::META_WHERE, true );
+        $where = [];
+        foreach ( is_array( $stored ) ? $stored : [] as $home_id => $said ) {
+            $where[ (int) $home_id ] = (string) $said;
+        }
+        return $where;
+    }
+
+    /**
+     * What one household's line reads, for a thing that may have several.
+     *
+     * Something written down when a thing could only be in one place has its
+     * one line in the post itself, and that is the answer wherever it is kept
+     * until some household is given a line of its own.
+     */
+    private function where_at( \WP_Post $post, int $home_id ): string {
+        $kept = $this->where_kept( (int) $post->ID );
+        if ( ! $kept ) {
+            return (string) $post->post_content;
+        }
+        return isset( $kept[ $home_id ] ) ? $kept[ $home_id ] : '';
+    }
+
+    /**
+     * Write one household's line, leaving what the other houses say alone.
+     *
+     * The first line written takes the old one with it: what the post itself
+     * said becomes every household's answer before this one is changed, so
+     * nothing said before houses were told apart is lost by telling them apart.
+     */
+    private function set_where( int $post_id, int $home_id, string $where ): void {
+        $kept = $this->where_kept( $post_id );
+        if ( ! $kept ) {
+            $post = get_post( $post_id );
+            $said = $post ? (string) $post->post_content : '';
+            foreach ( $this->home_ids_of_post( $post_id ) as $was ) {
+                $kept[ $was ] = $said;
+            }
+        }
+        $kept[ $home_id ] = wp_kses_post( $where );
+        update_post_meta( $post_id, self::META_WHERE, $kept );
     }
 
     /**
@@ -472,17 +544,78 @@ class Storage {
     }
 
     /**
-     * Move a thing to another home.
+     * Move a thing from one household to another: it is no longer kept at the
+     * first and is kept at the second, and the other houses it is kept at are
+     * not what was being said anything about.
      *
-     * The term is replaced rather than added: a thing is in one place at a
-     * time, which is the whole point of writing down where it is.
+     * Where it lived goes with it, because a move is one household saying what
+     * the next one is now being told — unless the household it is moving to
+     * already keeps it and has its own line, which is the better answer.
      */
     public function move_note( int $home_id, string $post_type, int $post_id, int $target_home_id ): bool {
-        if ( ! $this->note_belongs_to( $post_id, $post_type, $home_id ) || ! $this->get_home( $target_home_id ) ) {
+        if ( ! $this->note_belongs_to( $post_id, $post_type, $home_id ) || ! $this->get_home( $target_home_id ) || $home_id === $target_home_id ) {
             return false;
         }
-        wp_set_object_terms( $post_id, [ $target_home_id ], Access::TAXONOMY );
+        $post = get_post( $post_id );
+        $said = self::ITEM === $post_type ? $this->where_at( $post, $home_id ) : '';
+        $homes = array_values( array_diff( $this->home_ids_of_post( $post_id ), [ $home_id ] ) );
+        if ( ! in_array( $target_home_id, $homes, true ) ) {
+            $homes[] = $target_home_id;
+            if ( self::ITEM === $post_type ) {
+                $this->set_where( $post_id, $target_home_id, $said );
+            }
+        }
+        wp_set_object_terms( $post_id, $homes, Access::TAXONOMY );
+        if ( self::ITEM === $post_type ) {
+            $this->forget_where( $post_id, $home_id );
+        }
         return true;
+    }
+
+    /**
+     * Start keeping a thing at a household, or say afresh where it lives there.
+     * One verb for both, because they are the same sentence: this house keeps
+     * it, here.
+     */
+    public function keep_note_at( int $home_id, string $post_type, int $post_id, string $where ): bool {
+        $post = $post_id ? get_post( $post_id ) : null;
+        if ( ! $post || $post_type !== $post->post_type || ! $this->get_home( $home_id ) ) {
+            return false;
+        }
+        $homes = $this->home_ids_of_post( $post_id );
+        if ( ! in_array( $home_id, $homes, true ) ) {
+            $homes[] = $home_id;
+            wp_set_object_terms( $post_id, $homes, Access::TAXONOMY );
+        }
+        $this->set_where( $post_id, $home_id, $where );
+        return true;
+    }
+
+    /**
+     * Stop keeping a thing at a household. The last one is refused: a thing is
+     * somewhere rather than nowhere, and something kept nowhere is a thing to
+     * be removed rather than a thing to be left unfindable.
+     */
+    public function drop_note_at( int $home_id, string $post_type, int $post_id ): bool {
+        if ( ! $this->note_belongs_to( $post_id, $post_type, $home_id ) ) {
+            return false;
+        }
+        $homes = array_values( array_diff( $this->home_ids_of_post( $post_id ), [ $home_id ] ) );
+        if ( ! $homes ) {
+            return false;
+        }
+        wp_set_object_terms( $post_id, $homes, Access::TAXONOMY );
+        $this->forget_where( $post_id, $home_id );
+        return true;
+    }
+
+    /** A house that no longer keeps it has nothing to say about where it is. */
+    private function forget_where( int $post_id, int $home_id ): void {
+        $kept = $this->where_kept( $post_id );
+        if ( isset( $kept[ $home_id ] ) ) {
+            unset( $kept[ $home_id ] );
+            update_post_meta( $post_id, self::META_WHERE, $kept );
+        }
     }
 
     public function remove_note( int $home_id, string $post_type, int $post_id ): bool {
@@ -493,7 +626,12 @@ class Storage {
         return true;
     }
 
-    /** @return array[] every note of this type in this home. */
+    /**
+     * @return array[] every note of this type in this home. A thing's detail is
+     *                 what this household says about where it lives, and it
+     *                 carries the households it is kept at so a page can offer
+     *                 the ones it is not.
+     */
     public function get_notes( int $home_id, string $post_type ): array {
         $notes = [];
         foreach ( $this->posts_in_home( $home_id, $post_type ) as $post_id ) {
@@ -501,10 +639,12 @@ class Storage {
             if ( ! $post ) {
                 continue;
             }
+            $item = self::ITEM === $post_type;
             $notes[] = [
                 'id'       => (int) $post->ID,
                 'title'    => $post->post_title,
-                'detail'   => $post->post_content,
+                'detail'   => $item ? $this->where_at( $post, $home_id ) : $post->post_content,
+                'home_ids' => $item ? $this->home_ids_of_post( $post_id ) : [ $home_id ],
                 'modified' => $post->post_modified,
             ];
         }
@@ -512,35 +652,69 @@ class Storage {
     }
 
     /**
-     * One note by ID, with the household it is at — or nothing at all, if that
-     * is not what the ID is.
+     * One note by ID, with every household that keeps it — or nothing at all,
+     * if that is not what the ID is.
      *
-     * A note is in one household, which is what makes a page of its own
-     * possible: there is exactly one answer to where it is.
+     * A note kept nowhere is not a note anybody can be shown, so a note whose
+     * households have all gone is the same answer as a note that never was.
      */
     public function get_note( int $post_id, string $post_type ): array {
         $post = $post_id ? get_post( $post_id ) : null;
         if ( ! $post || $post_type !== $post->post_type ) {
             return [];
         }
-        $home_ids = $this->home_ids_of_post( $post_id );
-        $home = $home_ids ? $this->get_home( $home_ids[0] ) : [];
-        if ( ! $home ) {
+        $homes = $this->homes_of_note( $post, $post_type );
+        if ( ! $homes ) {
             return [];
         }
         return [
             'id'        => (int) $post->ID,
             'title'     => $post->post_title,
-            'detail'    => $post->post_content,
             // What is worth remembering about the thing, as against the line
             // saying where it lives. It is kept in the excerpt because that is
             // one of the three fields WordPress writes revisions of, so its
             // history is kept without keeping it.
             'note'      => $post->post_excerpt,
             'modified'  => $post->post_modified,
-            'home_id'   => (int) $home['id'],
-            'home_name' => $home['name'],
+            // Each household that keeps it, and what it says about where it
+            // lives there. Named in the same order the households list is, so
+            // the two pages read alike.
+            'homes'     => $homes,
         ];
+    }
+
+    /** @return array[] the households keeping a note, named and ordered, each with its own line. */
+    private function homes_of_note( \WP_Post $post, string $post_type ): array {
+        $homes = [];
+        foreach ( $this->home_ids_of_post( (int) $post->ID ) as $home_id ) {
+            $home = $this->get_home( $home_id );
+            if ( ! $home ) {
+                continue;
+            }
+            $home['where'] = self::ITEM === $post_type ? $this->where_at( $post, $home_id ) : $post->post_content;
+            $homes[] = $home;
+        }
+        usort( $homes, static function( array $a, array $b ): int {
+            return strcasecmp( $a['name'], $b['name'] );
+        } );
+        return $homes;
+    }
+
+    /**
+     * Whether a note is the viewer's to open at all: it is, if any one of the
+     * households keeping it is one of theirs.
+     */
+    public function may_reach_note( int $user_id, int $post_id, string $post_type ): bool {
+        $post = $post_id ? get_post( $post_id ) : null;
+        if ( ! $post || $post_type !== $post->post_type ) {
+            return false;
+        }
+        foreach ( $this->home_ids_of_post( $post_id ) as $home_id ) {
+            if ( Access::can_reach( $user_id, $home_id ) ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private function note_belongs_to( int $post_id, string $post_type, int $home_id ): bool {
@@ -549,19 +723,41 @@ class Storage {
     }
 
     /**
-     * Everything kept across the homes the viewer belongs to, and which home it
-     * is at. A thing is in one place at a time, so this is a list, not a join.
+     * Everything kept across the homes the viewer belongs to, said once each
+     * with the households keeping it under it. A thing in two houses is one
+     * thing, so it is one line here however many houses have it.
+     *
+     * Only the viewer's own households are named: that another family keeps the
+     * same thing is not something this page knows how to say, and is not theirs
+     * to be told.
      */
     public function get_things_overview( int $user_id ): array {
         $things = [];
         foreach ( Access::home_ids_for_user( $user_id ) as $home_id ) {
             $home = $this->get_home( $home_id );
             foreach ( $this->get_notes( $home_id, self::ITEM ) as $thing ) {
-                $thing['home_id'] = $home_id;
-                $thing['home_name'] = $home['name'] ?? '';
-                $things[] = $thing;
+                $id = $thing['id'];
+                if ( ! isset( $things[ $id ] ) ) {
+                    $things[ $id ] = [
+                        'id'    => $id,
+                        'title' => $thing['title'],
+                        'homes' => [],
+                    ];
+                }
+                $things[ $id ]['homes'][] = [
+                    'id'    => $home_id,
+                    'name'  => $home['name'] ?? '',
+                    'where' => $thing['detail'],
+                ];
             }
         }
+        $things = array_values( $things );
+        foreach ( $things as &$one ) {
+            usort( $one['homes'], static function( array $a, array $b ): int {
+                return strcasecmp( $a['name'], $b['name'] );
+            } );
+        }
+        unset( $one );
         usort( $things, static function( array $a, array $b ): int {
             return strcasecmp( $a['title'], $b['title'] );
         } );
