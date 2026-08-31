@@ -452,15 +452,27 @@ class App extends BaseApp {
             return $this->done();
         }
 
-        // A person is addressed directly rather than through a home.
+        // A person is addressed directly rather than through a home. Their
+        // name is theirs too, so it is renamed from here: whoever may read
+        // this page — themselves, or someone administering a household they
+        // are in — is who may put the spelling of it right.
         if ( 'save_person' === $action ) {
             $person_id = $post( 'person_id', 'int' ) ?: $viewer_person;
             if ( ! Access::can_view_person( $user_id, $person_id ) ) {
                 return $this->refuse();
             }
+            if ( '' === trim( $post( 'name' ) ) ) {
+                return $this->refuse( 'no-name' );
+            }
+            $sizes = [];
+            foreach ( array_keys( Storage::size_fields() ) as $size_key ) {
+                $sizes[ $size_key ] = $post( 'size_' . $size_key );
+            }
             $this->storage->save_person( $person_id, [
+                'name'      => $post( 'name' ),
                 'about'     => $post( 'about', 'raw' ),
                 'birthdate' => $post( 'birthdate' ),
+                'sizes'     => $sizes,
             ] );
             return $this->done();
         }
