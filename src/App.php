@@ -677,6 +677,27 @@ class App extends BaseApp {
                 $this->storage->things_arrived( $user_id, $post( 'from_home_id', 'int' ), $home_id );
                 break;
 
+            // Where a thing lives, asked of every household of yours at once,
+            // because it is one answer about one thing rather than a row of
+            // separate ones. Each line is still its own household's to write,
+            // so each is asked of that household rather than of the one the
+            // form happens to name — and a line for a house the viewer does
+            // not write in is not a line the form offered them.
+            case 'set_note_places':
+                $kind = $this->note_type( $post( 'kind', 'key' ) );
+                $note_id = $post( 'note_id', 'int' );
+                if ( Storage::ITEM !== $kind || ! $this->storage->may_reach_note( $user_id, $note_id, $kind ) ) {
+                    return $this->refuse();
+                }
+                $lines = isset( $_POST['where'] ) ? (array) wp_unslash( $_POST['where'] ) : [];
+                foreach ( $lines as $line_home => $line ) {
+                    $line_home = absint( $line_home );
+                    if ( $line_home && current_user_can( 'organise_household', $line_home ) ) {
+                        $this->storage->keep_note_at( $line_home, $kind, $note_id, (string) $line );
+                    }
+                }
+                break;
+
             case 'keep_note_at':
             case 'drop_note_at':
             case 'note_is_at':

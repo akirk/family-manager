@@ -125,36 +125,38 @@ require __DIR__ . '/_head.php';
 
         <section>
             <h2><?php echo esc_html__( 'Where it lives', 'households' ); ?></h2>
-            <?php // One line per household of yours: its name, and what it says about where the thing lives there. Every one of them is asked the same question, and answering it in a house that has never had the thing is how that house comes to have a place for it, so there is nothing else to press. ?>
-            <ul class="plain">
-                <?php foreach ( $hh_places as $hh_one ) : ?>
-                    <li class="row">
-                        <strong><a href="<?php echo esc_url( View::home_url( $hh_one['id'] ) ); ?>"><?php echo esc_html( $hh_one['name'] ); ?></a></strong>
-                        <?php if ( $hh_one['writing'] ) : ?>
-                            <?php // The household the line is about is the household the form names, so it is that one's permission that is asked for. ?>
-                            <form method="post" class="row grow">
-                                <?php View::fields( 'keep_note_at', [ 'kind' => 'item', 'note_id' => $hh_thing['id'], 'home_id' => $hh_one['id'] ] ); ?>
-                                <input class="grow" type="text" name="where"
+            <?php // One line per household of yours: its name, and what it says about where the thing lives there. Every one of them is asked the same question, and it is one form and one press, because it is one answer about the thing rather than a row of separate ones. Answering for a house that has never had the thing is how that house comes to have a place for it, so there is nothing else to press. ?>
+            <form method="post">
+                <?php View::fields( 'set_note_places', [ 'kind' => 'item', 'note_id' => $hh_thing['id'], 'home_id' => $hh_writing ] ); ?>
+                <ul class="plain">
+                    <?php foreach ( $hh_places as $hh_one ) : ?>
+                        <li class="row">
+                            <strong><a href="<?php echo esc_url( View::home_url( $hh_one['id'] ) ); ?>"><?php echo esc_html( $hh_one['name'] ); ?></a></strong>
+                            <?php if ( $hh_one['writing'] ) : ?>
+                                <?php // Each line is its own household's to write, which is what the name of the field says, so one form can carry them all without any of them being asked of the wrong house. ?>
+                                <input class="grow" type="text" name="where[<?php echo (int) $hh_one['id']; ?>]"
                                     value="<?php echo esc_attr( $hh_one['where'] ); ?>"
                                     placeholder="<?php echo esc_attr__( 'Where should it be here?', 'households' ); ?>"
                                     aria-label="<?php
                                     /* translators: %s: the name of a household. */
                                     echo esc_attr( sprintf( __( 'Where it lives at %s', 'households' ), $hh_one['name'] ) );
                                     ?>">
-                                <button class="primary" type="submit"><?php echo esc_html__( 'Save', 'households' ); ?></button>
-                            </form>
-                        <?php else : ?>
-                            <div class="grow meta">
-                                <?php
-                                echo $hh_one['where']
-                                    ? esc_html( $hh_one['where'] )
-                                    : esc_html__( 'Nothing is written down about where it lives.', 'households' );
-                                ?>
-                            </div>
-                        <?php endif; ?>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
+                            <?php else : ?>
+                                <div class="grow meta">
+                                    <?php
+                                    echo $hh_one['where']
+                                        ? esc_html( $hh_one['where'] )
+                                        : esc_html__( 'Nothing is written down about where it lives.', 'households' );
+                                    ?>
+                                </div>
+                            <?php endif; ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+                <?php if ( $hh_writing ) : ?>
+                    <button class="primary" type="submit" style="margin-top:12px"><?php echo esc_html__( 'Save', 'households' ); ?></button>
+                <?php endif; ?>
+            </form>
         </section>
 
         <?php // Where it has got to, which is a question the houses that keep it cannot each answer for themselves: a thing is in one place at a time even when several houses have a place for it. ?>
