@@ -614,7 +614,17 @@ class App extends BaseApp {
                 if ( ! $can_organise ) {
                     return $this->refuse();
                 }
-                $this->storage->update_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'note_id', 'int' ), $post( 'title' ), $post( 'detail', 'raw' ) );
+                // A form that says nothing about the note leaves it alone,
+                // which is how the pages that never ask about it are safe.
+                $note = isset( $_POST['note'] ) ? $post( 'note', 'raw' ) : null;
+                $this->storage->update_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'note_id', 'int' ), $post( 'title' ), $post( 'detail', 'raw' ), $note );
+                break;
+
+            case 'restore_note':
+                if ( ! $can_organise ) {
+                    return $this->refuse();
+                }
+                $this->storage->restore_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'note_id', 'int' ), $post( 'revision_id', 'int' ) );
                 break;
 
             case 'move_note':

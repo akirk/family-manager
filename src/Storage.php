@@ -393,16 +393,82 @@ class Storage {
         return $post_id;
     }
 
-    public function update_note( int $home_id, string $post_type, int $post_id, string $title, string $detail ): bool {
+    public function update_note( int $home_id, string $post_type, int $post_id, string $title, string $detail, ?string $note = null ): bool {
         if ( ! $this->note_belongs_to( $post_id, $post_type, $home_id ) || '' === trim( $title ) ) {
+            return false;
+        }
+        $fields = [
+            'ID'           => $post_id,
+            'post_content' => wp_kses_post( $detail ),
+            'post_title'   => sanitize_text_field( $title ),
+        ];
+        // Said nothing about the note and the note is left alone; a form that
+        // does not carry it is not a form emptying it.
+        if ( null !== $note ) {
+            $fields['post_excerpt'] = wp_kses_post( $note );
+        }
+        wp_update_post( $fields );
+        return true;
+    }
+
+    /**
+     * The note as it has read over time, newest first and each wording said
+     * once: a run of saves that left it alone is not a history of anything.
+     *
+     * @return array[] each with the revision to put back, when it was written
+     *                 and by whom.
+     */
+    public function get_note_history( int $post_id, string $post_type ): array {
+        $post = get_post( $post_id );
+        if ( ! $post || $post_type !== $post->post_type ) {
+            return [];
+        }
+        $history = [];
+        $newer = (string) $post->post_excerpt;
+        foreach ( wp_get_post_revisions( $post_id, [ 'check_enabled' => false ] ) as $revision ) {
+            $note = (string) $revision->post_excerpt;
+            if ( $note === $newer ) {
+                continue;
+            }
+            $history[] = [
+                'id'   => (int) $revision->ID,
+                'note' => $note,
+                'when' => $revision->post_modified,
+                'who'  => $this->who_saved( (int) $revision->post_author ),
+            ];
+            $newer = $note;
+        }
+        return $history;
+    }
+
+    /**
+     * Put an older wording of the note back. Only the note: the name and where
+     * it lives are what they are now, and were not what was asked about.
+     */
+    public function restore_note( int $home_id, string $post_type, int $post_id, int $revision_id ): bool {
+        if ( ! $this->note_belongs_to( $post_id, $post_type, $home_id ) ) {
+            return false;
+        }
+        $revision = wp_get_post_revision( $revision_id );
+        if ( ! $revision || (int) $revision->post_parent !== $post_id ) {
             return false;
         }
         wp_update_post( [
             'ID'           => $post_id,
-            'post_content' => wp_kses_post( $detail ),
-            'post_title'   => sanitize_text_field( $title ),
+            'post_excerpt' => $revision->post_excerpt,
         ] );
         return true;
+    }
+
+    /** Whoever saved it, said the way the family says their name. */
+    private function who_saved( int $user_id ): string {
+        $person = $user_id ? Access::person_for_user( $user_id ) : 0;
+        $named = $person ? $this->get_person( $person ) : [];
+        if ( ! empty( $named['name'] ) ) {
+            return $named['name'];
+        }
+        $user = $user_id ? get_userdata( $user_id ) : null;
+        return $user ? $user->display_name : '';
     }
 
     /**
@@ -466,6 +532,11 @@ class Storage {
             'id'        => (int) $post->ID,
             'title'     => $post->post_title,
             'detail'    => $post->post_content,
+            // What is worth remembering about the thing, as against the line
+            // saying where it lives. It is kept in the excerpt because that is
+            // one of the three fields WordPress writes revisions of, so its
+            // history is kept without keeping it.
+            'note'      => $post->post_excerpt,
             'modified'  => $post->post_modified,
             'home_id'   => (int) $home['id'],
             'home_name' => $home['name'],

@@ -12,6 +12,9 @@ $hh_thing = View::storage()->get_note( (int) get_query_var( 'note_id' ), Storage
 $hh_reach = $hh_thing && Access::can_reach( $hh_user, $hh_thing['home_id'] );
 $hh_writing = $hh_reach && current_user_can( 'organise_household', $hh_thing['home_id'] );
 $hh_homes = $hh_reach ? View::storage()->get_homes_for_user( $hh_user ) : [];
+// Every wording the note has had, newest first. A save that left it alone is
+// not a version of it, so it is not one here either.
+$hh_history = $hh_reach ? View::storage()->get_note_history( $hh_thing['id'], Storage::ITEM ) : [];
 
 $hh_title = $hh_reach ? $hh_thing['title'] : __( 'Thing', 'households' );
 
@@ -49,6 +52,10 @@ require __DIR__ . '/_head.php';
                     <label class="wide"><?php echo esc_html__( 'Where it lives', 'households' ); ?>
                         <input type="text" name="detail" value="<?php echo esc_attr( $hh_thing['detail'] ); ?>">
                     </label>
+                    <label class="wide"><?php echo esc_html__( 'Note', 'households' ); ?>
+                        <small><?php echo esc_html__( 'Anything worth remembering about it. What it said before is kept.', 'households' ); ?></small>
+                        <textarea name="note"><?php echo esc_textarea( $hh_thing['note'] ); ?></textarea>
+                    </label>
                     <button class="primary" type="submit"><?php echo esc_html__( 'Save', 'households' ); ?></button>
                 </form>
             <?php else : ?>
@@ -59,8 +66,43 @@ require __DIR__ . '/_head.php';
                         : esc_html__( 'Nothing is written down about where it lives.', 'households' );
                     ?>
                 </p>
+                <?php if ( $hh_thing['note'] ) : ?>
+                    <p class="note"><?php echo esc_html( $hh_thing['note'] ); ?></p>
+                <?php endif; ?>
             <?php endif; ?>
         </section>
+
+        <?php if ( $hh_history ) : ?>
+            <section>
+                <h2><?php echo esc_html__( 'What the note said before', 'households' ); ?></h2>
+                <ul class="plain">
+                    <?php foreach ( $hh_history as $hh_was ) : ?>
+                        <li class="row">
+                            <div class="grow">
+                                <div class="meta">
+                                    <?php
+                                    echo esc_html( View::when( $hh_was['when'] ) );
+                                    echo $hh_was['who'] ? ' · ' . esc_html( $hh_was['who'] ) : '';
+                                    ?>
+                                </div>
+                                <?php if ( $hh_was['note'] ) : ?>
+                                    <p class="note"><?php echo esc_html( $hh_was['note'] ); ?></p>
+                                <?php else : ?>
+                                    <p class="note meta"><?php echo esc_html__( 'Nothing was written down.', 'households' ); ?></p>
+                                <?php endif; ?>
+                            </div>
+                            <?php // Only the note goes back. The name and where it lives are what they are now, and were not what was asked about. ?>
+                            <?php if ( $hh_writing ) : ?>
+                                <form method="post">
+                                    <?php View::fields( 'restore_note', [ 'kind' => 'item', 'note_id' => $hh_thing['id'], 'home_id' => $hh_thing['home_id'], 'revision_id' => $hh_was['id'] ] ); ?>
+                                    <button type="submit" class="quiet"><?php echo esc_html__( 'Put this back', 'households' ); ?></button>
+                                </form>
+                            <?php endif; ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            </section>
+        <?php endif; ?>
 
         <?php if ( $hh_writing && count( $hh_homes ) > 1 ) : ?>
             <section>

@@ -52,6 +52,14 @@ class View {
     }
 
     /**
+     * A moment something was written down: the day, and the time after it.
+     * WordPress keeps these in the site's own time, and reads them back so.
+     */
+    public static function when( string $stamp ): string {
+        return $stamp ? mysql2date( 'D j M Y, H:i', $stamp ) : '';
+    }
+
+    /**
      * The hidden fields every form carries: which verb it is, and the nonce
      * that says the form came from here. The nonce is per verb, so a form for
      * one thing cannot be replayed as another.

@@ -123,6 +123,8 @@ $hh_title = isset( $hh_title ) && '' !== trim( $hh_title ) ? $hh_title : __( 'Ho
         label.inline input { width: auto; min-height: 0; }
         form.grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); align-items: end; }
         form.grid .wide { grid-column: 1 / -1; }
+        /* Prose somebody typed, kept with the line breaks they typed. */
+        p.note { margin: 8px 0 0; white-space: pre-wrap; }
         .done { text-decoration: line-through; color: var(--hh-muted); }
         form.inline { display: inline; }
         .actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
