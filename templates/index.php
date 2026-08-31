@@ -46,6 +46,16 @@ $hh_tasks = $hh_sifted['tasks'];
 $hh_quiet = $hh_sifted['quiet'];
 $hh_can_add = ! empty( $hh_here['viewer']['can_organise'] );
 
+// Writing a task down and putting one right are the same form, so which of the
+// two it is doing is the one question asked here: a task named in the URL, and
+// on the list being read, is the one the form opens with in it.
+$hh_form_task = [];
+foreach ( $hh_tasks as $hh_task ) {
+    if ( $hh_task['id'] === $hh_editing ) {
+        $hh_form_task = $hh_task;
+    }
+}
+
 // The shelf you can actually reach today, so a thing that lives here and has
 // gone somewhere else is not on it: this list is read to find something, and a
 // thing that is not in the house is not there to be found. The household's own
@@ -59,8 +69,10 @@ foreach ( isset( $hh_here['items'] ) ? $hh_here['items'] : [] as $hh_thing ) {
     }
     $hh_shelf[] = $hh_thing;
 }
-$hh_open = add_query_arg( 'add', 1, $hh_url );
-$hh_close = remove_query_arg( 'add', $hh_url );
+// The page with the form shut, which is where a form that was opened by the URL
+// posts back to and what the way out of it points at.
+$hh_shut = remove_query_arg( [ 'add', 'edit' ], $hh_url );
+$hh_open = add_query_arg( 'add', 1, $hh_shut );
 
 $hh_title = __( 'Overview', 'households' );
 
@@ -109,10 +121,15 @@ require __DIR__ . '/_head.php';
                                         <?php echo $hh_earlier ? esc_html__( 'the past week', 'households' ) : esc_html__( 'done earlier', 'households' ); ?>
                                     </a>
                                 <?php endif; ?>
-                                <?php if ( $hh_can_add ) : ?>
+                                <?php if ( $hh_can_add && $hh_form_task ) : ?>
+                                    <?php // The form has a task in it, which is a row of the list not being shown as a row: shutting it is the list back as it was, so it is the page being asked for rather than something hidden. ?>
+                                    <a class="pill" data-hh-live href="<?php echo esc_url( $hh_shut ); ?>"
+                                        aria-controls="add" aria-expanded="true"
+                                        aria-label="<?php echo esc_attr__( 'Leave it as it was', 'households' ); ?>">&times;</a>
+                                <?php elseif ( $hh_can_add ) : ?>
                                     <?php // A link that asks the page for the form; the script opens the one already here instead. ?>
-                                    <a class="pill" data-hh-add href="<?php echo esc_url( $hh_adding ? $hh_close : $hh_open ); ?>"
-                                        data-hh-open="<?php echo esc_url( $hh_open ); ?>" data-hh-close="<?php echo esc_url( $hh_close ); ?>"
+                                    <a class="pill" data-hh-add href="<?php echo esc_url( $hh_adding ? $hh_shut : $hh_open ); ?>"
+                                        data-hh-open="<?php echo esc_url( $hh_open ); ?>" data-hh-close="<?php echo esc_url( $hh_shut ); ?>"
                                         aria-controls="add" aria-expanded="<?php echo $hh_adding ? 'true' : 'false'; ?>"
                                         aria-label="<?php echo esc_attr__( 'Write something down', 'households' ); ?>"><?php echo $hh_adding ? '&times;' : '+'; ?></a>
                                 <?php endif; ?>
@@ -121,30 +138,13 @@ require __DIR__ . '/_head.php';
                     </div>
 
                     <?php if ( $hh_can_add ) : ?>
-                        <form method="post" class="grid" id="add" style="margin-bottom:12px" <?php echo $hh_adding ? '' : 'hidden'; ?>>
-                            <?php View::fields( 'add_task', [ 'home_id' => $hh_where['home_id'] ] ); ?>
-                            <label class="wide"><?php echo esc_html__( 'What needs doing', 'households' ); ?>
-                                <input type="text" name="title" required <?php echo $hh_adding ? 'autofocus' : ''; ?>>
-                            </label>
-                            <label><?php echo esc_html__( 'For whom', 'households' ); ?>
-                                <select name="person_id">
-                                    <option value="0"><?php echo esc_html__( 'Everyone', 'households' ); ?></option>
-                                    <?php foreach ( $hh_here['people'] as $hh_person ) : ?>
-                                        <option value="<?php echo (int) $hh_person['id']; ?>"><?php echo esc_html( $hh_person['name'] ); ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </label>
-                            <label><?php echo esc_html__( 'Kind', 'households' ); ?>
-                                <select name="task_type">
-                                    <option value="task"><?php echo esc_html__( 'Task', 'households' ); ?></option>
-                                    <option value="appointment"><?php echo esc_html__( 'Appointment', 'households' ); ?></option>
-                                </select>
-                            </label>
-                            <label><?php echo esc_html__( 'When', 'households' ); ?>
-                                <input type="date" name="due_date">
-                            </label>
-                            <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-                        </form>
+                        <?php
+                        $hh_form_home = $hh_where['home_id'];
+                        $hh_form_people = $hh_here['people'];
+                        $hh_form_shut = $hh_shut;
+                        $hh_form_open = $hh_adding || $hh_form_task;
+                        require __DIR__ . '/_task-form.php';
+                        ?>
                     <?php endif; ?>
 
                     <ul class="plain">
@@ -166,7 +166,6 @@ require __DIR__ . '/_head.php';
                         <?php
                         $hh_task_home = $hh_where['home_id'];
                         $hh_task_url = $hh_url;
-                        $hh_task_people = isset( $hh_here['people'] ) ? $hh_here['people'] : [];
                         $hh_task_writing = $hh_can_add;
                         $hh_task_editing = $hh_editing;
                         ?>

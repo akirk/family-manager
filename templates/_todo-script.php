@@ -42,13 +42,20 @@ namespace Households;
     // no script go quiet — and stay quiet however often a section is exchanged.
     document.documentElement.setAttribute( 'data-hh-live', '' );
 
+    /** Whether the form is the empty one, waiting for something new. */
+    function adding( form ) {
+        return !! form && 'add' === form.getAttribute( 'data-hh-mode' );
+    }
+
     function swap( html ) {
-        // The server has no idea the form is open — that is not in the URL and
-        // does not belong there — so what came back has it shut, and it is put
-        // back the way it was found. Which row is being edited is in the URL,
-        // so that comes back on its own.
+        // The server has no idea the empty form is open — that is not in the
+        // URL and does not belong there — so what came back has it shut, and it
+        // is put back the way it was found. A form with a task in it was opened
+        // by the URL, so that one comes back on its own, and being handed one
+        // is not being handed the other: what is put back has to be the form
+        // that was open, or saving a task would leave the empty one showing.
         var form = document.getElementById( 'add' );
-        var was = form && ! form.hidden;
+        var was = adding( form ) && ! form.hidden;
         var fresh = new DOMParser().parseFromString( html, 'text/html' );
         living().forEach( function ( id ) {
             var here = document.getElementById( id );
@@ -65,7 +72,7 @@ namespace Households;
                 here.remove();
             }
         } );
-        if ( was ) {
+        if ( was && adding( document.getElementById( 'add' ) ) ) {
             reveal( true );
         }
     }
@@ -107,7 +114,7 @@ namespace Households;
                 // Written down and gone from the fields: the next one is
                 // expected, so the cursor is put back where it was. Ticking
                 // something off is not that, and takes no cursor anywhere.
-                var again = form && 'add' === form.id
+                var again = adding( form )
                     ? document.querySelector( '#hh-todo form#add:not([hidden]) input[name="title"]' )
                     : null;
                 if ( again ) {
@@ -118,7 +125,7 @@ namespace Households;
                 // open; a section put back in was never loaded, so it is said
                 // again here.
                 if ( ! form ) {
-                    var typing = document.querySelector( '[data-hh-live-section] form[action] input[name="title"]' );
+                    var typing = document.querySelector( '[data-hh-live-section] form[action]:not([hidden]) input[name="title"]' );
                     if ( typing ) {
                         typing.focus();
                     }
