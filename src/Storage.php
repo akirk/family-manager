@@ -824,7 +824,8 @@ class Storage {
      * A date as the app says it out loud, in a sentence: today, tomorrow, or
      * the weekday and the date.
      */
-    private function say_date( string $date, string $today ): string {
+    public function say_date( string $date, string $today = '' ): string {
+        $today = $today ?: current_time( 'Y-m-d' );
         if ( '' === $this->normalize_date( $date ) ) {
             return '';
         }

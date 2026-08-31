@@ -8,6 +8,8 @@ A WordPress app powered by [WpApp](https://github.com/akirk/wp-app) for running 
 
 ## How it works
 
+- **It is a WordPress plugin, not an app that happens to live in WordPress.** Every page is server-rendered PHP: it reads through `Storage`, prints its lists, and every change is a `<form method="post">` posting back to the page it was made on. A handler on `template_redirect` checks the nonce, does the work and redirects to the same URL, so a refresh repeats nothing and what comes back is simply the page read afresh; anything refused is named in the URL and said by the page. There is no build step, no endpoint the pages talk to, and nothing that needs JavaScript to work — the only script in the plugin is a `confirm()` on removing someone from a home, which without it simply submits.
+
 - **A home is a term; everything in it is a post tagged with that term.** People, the facts a house needs you to know, the things kept there, what needs doing — one join answers every question about a home, and a question about several homes at once is the same join with more terms in it. The taxonomy is registered closed, because terms are global in a way private posts are not.
 
   | | |

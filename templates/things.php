@@ -1,69 +1,58 @@
-<?php require __DIR__ . '/_head.php'; ?>
-        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Your day', 'households' ); ?></a>
+<?php
+/**
+ * Everything kept across the homes you belong to, and which house it is at.
+ * A thing is in one place at a time, so it is moved rather than removed.
+ */
+
+namespace Households;
+
+$hh_user = View::user_id();
+$hh_person = View::person_id();
+$hh_things = View::storage()->get_things_overview( $hh_user );
+$hh_homes = View::storage()->get_homes_for_person( $hh_person );
+
+require __DIR__ . '/_head.php';
+?>
+        <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Your day', 'households' ); ?></a>
         <h1><?php echo esc_html__( 'Things', 'households' ); ?></h1>
         <p class="subtitle"><?php echo esc_html__( 'Everything kept across the homes you belong to, and which house it is at.', 'households' ); ?></p>
-        <div class="status" data-status><?php echo esc_html__( 'Loading…', 'households' ); ?></div>
+        <?php View::notice(); ?>
 
         <section>
-            <ul class="plain" data-things></ul>
+            <ul class="plain">
+                <?php if ( ! $hh_things ) : ?>
+                    <li class="empty"><?php echo esc_html__( 'Nothing listed in any of your homes yet.', 'households' ); ?></li>
+                <?php endif; ?>
+                <?php foreach ( $hh_things as $hh_thing ) : ?>
+                    <li class="row">
+                        <div class="grow">
+                            <strong><?php echo esc_html( $hh_thing['title'] ); ?></strong>
+                            <div class="meta"><?php echo esc_html( $hh_thing['detail'] ); ?></div>
+                            <div style="margin-top:4px">
+                                <a class="pill" style="text-decoration:none" href="<?php echo esc_url( View::home_url( $hh_thing['home_id'] ) ); ?>">
+                                    <?php
+                                    /* translators: %s: the name of a home. */
+                                    echo esc_html( sprintf( __( 'at %s', 'households' ), $hh_thing['home_name'] ) );
+                                    ?>
+                                </a>
+                            </div>
+                        </div>
+                        <?php // The thing names the home it is leaving, not the page. ?>
+                        <form method="post" class="actions">
+                            <?php View::fields( 'move_note', [ 'home_id' => $hh_thing['home_id'], 'kind' => 'item', 'note_id' => $hh_thing['id'] ] ); ?>
+                            <?php foreach ( $hh_homes as $hh_home ) : ?>
+                                <?php if ( $hh_home['id'] !== $hh_thing['home_id'] ) : ?>
+                                    <button type="submit" class="quiet" name="target_home_id" value="<?php echo (int) $hh_home['id']; ?>">
+                                        <?php
+                                        /* translators: %s: the name of a home. */
+                                        echo esc_html( sprintf( __( 'Move to %s', 'households' ), $hh_home['name'] ) );
+                                        ?>
+                                    </button>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        </form>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
         </section>
-    <script>
-        (function() {
-            const t = {
-                none: '<?php echo esc_js( __( 'Nothing listed in any of your homes yet.', 'households' ) ); ?>',
-                moveTo: '<?php echo esc_js( __( 'Move to %s', 'households' ) ); ?>',
-                at: '<?php echo esc_js( __( 'at %s', 'households' ) ); ?>',
-            };
-            const list = document.querySelector('[data-things]');
-
-            function load() {
-                hh.say('');
-                return hh.post('get_things', {}).then(render).catch((error) => hh.say(error.message, true));
-            }
-
-            function move(thing, home) {
-                hh.say('');
-                // The thing names the home it is leaving, not the page.
-                return hh.post('move_note', {
-                    home_id: thing.home_id,
-                    kind: 'item',
-                    note_id: thing.id,
-                    target_home_id: home.id,
-                }).then(load).catch((error) => hh.say(error.message, true));
-            }
-
-            function render(data) {
-                list.innerHTML = '';
-                if (!data.things.length) {
-                    list.appendChild(hh.el('li', { class: 'empty', text: t.none }));
-                    hh.say('');
-                    return;
-                }
-                data.things.forEach((thing) => {
-                    const buttons = data.homes
-                        .filter((home) => home.id !== thing.home_id)
-                        .map((home) => hh.el('button', {
-                            class: 'quiet', type: 'button', text: t.moveTo.replace('%s', home.name),
-                            onclick: () => move(thing, home),
-                        }));
-                    list.appendChild(hh.el('li', { class: 'row' }, [
-                        hh.el('div', {}, [
-                            hh.el('strong', { text: thing.title }),
-                            hh.el('div', { class: 'meta', text: thing.detail }),
-                            hh.el('div', { style: 'margin-top:4px' }, [
-                                hh.el('a', {
-                                    class: 'pill', href: hh.homeUrl(thing.home_id),
-                                    text: t.at.replace('%s', thing.home_name), style: 'text-decoration:none',
-                                }),
-                            ]),
-                        ]),
-                        hh.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, buttons),
-                    ]));
-                });
-                hh.say('');
-            }
-
-            load();
-        })();
-    </script>
 <?php require __DIR__ . '/_foot.php'; ?>

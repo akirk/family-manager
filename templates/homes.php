@@ -3,95 +3,75 @@
  * Every home you belong to, and where a new one is started. A home with
  * nobody in it is not a home, so starting one puts you in it.
  */
+
+namespace Households;
+
+$hh_user = View::user_id();
+$hh_homes = View::storage()->get_homes_overview( $hh_user );
+
 require __DIR__ . '/_head.php';
 ?>
-        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Your day', 'households' ); ?></a>
+        <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Your day', 'households' ); ?></a>
         <h1><?php echo esc_html__( 'Your homes', 'households' ); ?></h1>
         <p class="subtitle"><?php echo esc_html__( 'Every home you belong to, and who is under each roof today.', 'households' ); ?></p>
-        <div class="status" data-status><?php echo esc_html__( 'Loading…', 'households' ); ?></div>
+        <?php View::notice(); ?>
 
         <section>
-            <ul class="plain" data-homes></ul>
+            <ul class="plain">
+                <?php if ( ! $hh_homes ) : ?>
+                    <li class="empty"><?php echo esc_html__( 'You do not belong to a home yet. Start one below and it is yours.', 'households' ); ?></li>
+                <?php endif; ?>
+                <?php foreach ( $hh_homes as $hh_home ) : ?>
+                    <li class="row">
+                        <?php // Wide enough that the buttons drop to their own line on a phone. ?>
+                        <div class="grow">
+                            <h2 style="margin:0 0 2px;font-size:1.15rem">
+                                <a style="text-decoration:none" href="<?php echo esc_url( View::home_url( $hh_home['id'] ) ); ?>"><?php echo esc_html( $hh_home['name'] ); ?></a>
+                            </h2>
+                            <div class="meta">
+                                <?php
+                                $hh_here = wp_list_pluck( $hh_home['here'], 'name' );
+                                echo $hh_here
+                                    ? esc_html__( 'Here today:', 'households' ) . ' ' . esc_html( implode( ', ', $hh_here ) )
+                                    : esc_html__( 'Nobody here today.', 'households' );
+                                ?>
+                            </div>
+                            <div class="meta">
+                                <?php if ( ! $hh_home['open_tasks'] ) : ?>
+                                    <?php echo esc_html__( 'Nothing to do', 'households' ); ?>
+                                <?php else : ?>
+                                    <?php
+                                    printf(
+                                        esc_html(
+                                            /* translators: %d: how many things are still to do. */
+                                            _n( '%d thing to do', '%d things to do', $hh_home['open_tasks'], 'households' )
+                                        ),
+                                        (int) $hh_home['open_tasks']
+                                    );
+                                    ?>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <div class="actions">
+                            <a class="button primary" href="<?php echo esc_url( View::home_url( $hh_home['id'] ) ); ?>"><?php echo esc_html__( 'Open', 'households' ); ?></a>
+                            <?php if ( $hh_home['can_manage'] ) : ?>
+                                <a class="button" href="<?php echo esc_url( View::home_url( $hh_home['id'], 'manage/' ) ); ?>"><?php echo esc_html__( 'Manage', 'households' ); ?></a>
+                            <?php endif; ?>
+                        </div>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
         </section>
 
         <section>
             <h2><?php echo esc_html__( 'Start a home', 'households' ); ?></h2>
             <p class="meta"><?php echo esc_html__( 'A house, a flat, a grandparent’s spare room — anywhere the family keeps things and people. You will be the first person in it and the one who administers it; everyone else is added from the home itself, which is where this takes you.', 'households' ); ?></p>
-            <form data-start class="grid">
+            <form method="post" class="grid">
+                <?php View::fields( 'start_home' ); ?>
                 <label class="wide"><?php echo esc_html__( 'What is it called?', 'households' ); ?>
                     <input type="text" name="name" required maxlength="80" placeholder="<?php echo esc_attr__( 'Home', 'households' ); ?>">
                 </label>
                 <div><button class="primary" type="submit"><?php echo esc_html__( 'Start it', 'households' ); ?></button></div>
             </form>
         </section>
-    <script>
-        (function() {
-            const t = {
-                none: '<?php echo esc_js( __( 'You do not belong to a home yet. Start one below and it is yours.', 'households' ) ); ?>',
-                here: '<?php echo esc_js( __( 'Here today:', 'households' ) ); ?>',
-                nobody: '<?php echo esc_js( __( 'Nobody here today.', 'households' ) ); ?>',
-                open: '<?php echo esc_js( __( 'Open', 'households' ) ); ?>',
-                manage: '<?php echo esc_js( __( 'Manage', 'households' ) ); ?>',
-                task: '<?php echo esc_js( __( '1 thing to do', 'households' ) ); ?>',
-                tasks: '<?php echo esc_js( __( '%d things to do', 'households' ) ); ?>',
-                clear: '<?php echo esc_js( __( 'Nothing to do', 'households' ) ); ?>',
-                starting: '<?php echo esc_js( __( 'Starting it…', 'households' ) ); ?>',
-                failed: '<?php echo esc_js( __( 'That home could not be started. Give it a name.', 'households' ) ); ?>',
-            };
-            const list = document.querySelector('[data-homes]');
-            const form = document.querySelector('[data-start]');
-
-            function render(data) {
-                list.innerHTML = '';
-                if (!data.homes.length) {
-                    list.appendChild(hh.el('li', { class: 'empty', text: t.none }));
-                    hh.say('');
-                    return;
-                }
-                data.homes.forEach((home) => {
-                    const names = home.here.map((person) => person.name);
-                    const count = home.open_tasks === 0 ? t.clear
-                        : (home.open_tasks === 1 ? t.task : t.tasks.replace('%d', home.open_tasks));
-                    const actions = [hh.el('a', { class: 'button primary', href: hh.homeUrl(home.id), text: t.open })];
-                    if (home.can_manage) {
-                        actions.push(hh.el('a', { class: 'button', href: hh.homeUrl(home.id, 'manage/'), text: t.manage }));
-                    }
-                    list.appendChild(hh.el('li', { class: 'row' }, [
-                        // Wide enough that the buttons drop to their own line
-                        // on a phone rather than sitting beside a short name.
-                        hh.el('div', { style: 'flex:1 1 240px' }, [
-                            hh.el('h2', { style: 'margin:0 0 2px;font-size:1.15rem' }, [
-                                hh.el('a', { href: hh.homeUrl(home.id), text: home.name, style: 'text-decoration:none' }),
-                            ]),
-                            hh.el('div', { class: 'meta', text: names.length ? t.here + ' ' + names.join(', ') : t.nobody }),
-                            hh.el('div', { class: 'meta', text: count }),
-                        ]),
-                        hh.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, actions),
-                    ]));
-                });
-                hh.say('');
-            }
-
-            form.addEventListener('submit', (event) => {
-                event.preventDefault();
-                hh.say(t.starting);
-                hh.post('start_home', { name: form.name.value })
-                    .then((data) => {
-                        // A home you have just started is a home with one person
-                        // in it, so the next thing anyone does is add the rest.
-                        if (data.started) {
-                            window.location.href = hh.homeUrl(data.started, 'manage/');
-                            return;
-                        }
-                        render(data);
-                        hh.say(t.failed, true);
-                    })
-                    .catch((error) => hh.say(error.message, true));
-            });
-
-            hh.post('get_homes', {})
-                .then(render)
-                .catch((error) => hh.say(error.message, true));
-        })();
-    </script>
 <?php require __DIR__ . '/_foot.php'; ?>
