@@ -71,7 +71,7 @@ class View {
         $said = [
             'not-allowed' => __( 'You are not allowed to do that.', 'households' ),
             'expired'     => __( 'That form had been open too long. Nothing was changed — try again.', 'households' ),
-            'no-home'     => __( 'You do not belong to a home yet.', 'households' ),
+            'no-home'     => __( 'You do not have a household yet.', 'households' ),
             'no-name'     => __( 'That needs a name.', 'households' ),
         ];
         printf(

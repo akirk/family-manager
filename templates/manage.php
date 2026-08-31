@@ -1,6 +1,6 @@
 <?php
 /**
- * Managing one home: who is in it, who administers it, what it is called.
+ * Managing one household: who is in it, who administers it, what it is called.
  */
 
 namespace Households;
@@ -8,6 +8,13 @@ namespace Households;
 $hh_home_id = (int) get_query_var( 'id' );
 $hh_user = View::user_id();
 $hh = View::storage()->get_dashboard( $hh_user, $hh_home_id );
+
+// The accounts nobody answers for, read once: a select is a select, however
+// many rows are drawn under it.
+$hh_free_users = $hh ? View::storage()->assignable_users( 0 ) : [];
+
+/* translators: %s: the name of a household. */
+$hh_title = $hh ? sprintf( __( 'Manage %s', 'households' ), $hh['home']['name'] ) : __( 'A household', 'households' );
 
 require __DIR__ . '/_head.php';
 
@@ -17,7 +24,7 @@ if ( ! $hh ) {
 }
 ?>
         <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Your day', 'households' ); ?></a>
-        <h1><?php echo esc_html__( 'Manage this home', 'households' ); ?></h1>
+        <h1><?php echo esc_html__( 'Manage this household', 'households' ); ?></h1>
         <p class="subtitle"><?php echo esc_html( $hh['home']['name'] ); ?></p>
         <?php View::notice(); ?>
 
@@ -25,7 +32,7 @@ if ( ! $hh ) {
             <h2><?php echo esc_html__( 'Name', 'households' ); ?></h2>
             <form method="post" class="grid">
                 <?php View::fields( 'update_home' ); ?>
-                <label class="wide"><?php echo esc_html__( 'What this home is called', 'households' ); ?>
+                <label class="wide"><?php echo esc_html__( 'What this household is called', 'households' ); ?>
                     <input type="text" name="name" required value="<?php echo esc_attr( $hh['home']['name'] ); ?>">
                 </label>
                 <button class="primary" type="submit"><?php echo esc_html__( 'Save', 'households' ); ?></button>
@@ -34,6 +41,14 @@ if ( ! $hh ) {
 
         <section>
             <h2><?php echo esc_html__( 'Who is in it', 'households' ); ?></h2>
+            <p class="meta"><?php echo esc_html__( 'Accounts are made in WordPress, then pointed at a person here. Most people never need one.', 'households' ); ?></p>
+            <?php // Setting a household up does not put you in it, so this is how you say that you live here too. ?>
+            <?php if ( ! Access::is_member( $hh['viewer']['person_id'], $hh_home_id ) ) : ?>
+                <form method="post" class="actions" style="margin-bottom:10px">
+                    <?php View::fields( 'join_me' ); ?>
+                    <button class="primary" type="submit"><?php echo esc_html__( 'I am in this household too', 'households' ); ?></button>
+                </form>
+            <?php endif; ?>
             <ul class="plain">
                 <?php if ( ! $hh['people'] ) : ?>
                     <li class="empty"><?php echo esc_html__( 'Nobody here yet.', 'households' ); ?></li>
@@ -59,7 +74,7 @@ if ( ! $hh ) {
                                     <span class="pill"><?php echo esc_html( $hh_person['label'] ); ?></span>
                                 <?php endif; ?>
                                 <?php if ( $hh_is_admin ) : ?>
-                                    <span class="pill"><?php echo esc_html__( 'Administers this home', 'households' ); ?></span>
+                                    <span class="pill"><?php echo esc_html__( 'Administers this household', 'households' ); ?></span>
                                 <?php endif; ?>
                                 <?php if ( ! $hh_person['user_id'] ) : ?>
                                     <span class="pill warm"><?php echo esc_html__( 'No account', 'households' ); ?></span>
@@ -77,6 +92,13 @@ if ( ! $hh ) {
                                     <?php echo $hh_person['is_child'] ? esc_html__( 'Not a child', 'households' ) : esc_html__( 'Is a child', 'households' ); ?>
                                 </button>
                             </form>
+                            <?php
+                            // Which account is theirs. The same control as the
+                            // person's own page: it is one fact about them, not
+                            // a fact about this household.
+                            $hh_account_person = $hh_person;
+                            require __DIR__ . '/_account.php';
+                            ?>
                         </div>
                         <div class="actions" style="align-items:flex-start">
                             <a class="button quiet" href="<?php echo esc_url( View::person_url( $hh_person['id'] ) ); ?>"><?php echo esc_html__( 'Open page', 'households' ); ?></a>
@@ -93,10 +115,10 @@ if ( ! $hh ) {
                                 <form method="post" onsubmit="return confirm(this.dataset.confirm)"
                                     data-confirm="<?php
                                     /* translators: %s: a name. */
-                                    echo esc_attr( sprintf( __( 'Remove %s from this home? Their record and everything written on it stays.', 'households' ), $hh_person['name'] ) );
+                                    echo esc_attr( sprintf( __( 'Remove %s from this household? Their record and everything written on it stays.', 'households' ), $hh_person['name'] ) );
                                     ?>">
                                     <?php View::fields( 'remove_person', [ 'person_id' => $hh_person['id'] ] ); ?>
-                                    <button type="submit" class="quiet"><?php echo esc_html__( 'Remove from this home', 'households' ); ?></button>
+                                    <button type="submit" class="quiet"><?php echo esc_html__( 'Remove from this household', 'households' ); ?></button>
                                 </form>
                             <?php endif; ?>
                         </div>
@@ -106,13 +128,11 @@ if ( ! $hh ) {
         </section>
 
         <section>
-            <h2><?php echo esc_html__( 'Add someone', 'households' ); ?></h2>
-            <p class="meta"><?php echo esc_html__( 'An email address gives them an account they can log in with. Leave it empty for someone who will never log in — a small child, or a relative you are only keeping notes about.', 'households' ); ?></p>
+            <h2><?php echo esc_html__( 'Add someone new', 'households' ); ?></h2>
+            <p class="meta"><?php echo esc_html__( 'A name is enough. Whether anybody signs in as them is a separate question, answered above once the account exists.', 'households' ); ?></p>
             <form method="post" class="grid">
                 <?php View::fields( 'add_person' ); ?>
                 <label><?php echo esc_html__( 'Name', 'households' ); ?><input type="text" name="name" required></label>
-                <label><?php echo esc_html__( 'Email (optional)', 'households' ); ?><input type="email" name="email"></label>
-                <label><?php echo esc_html__( 'Password (optional)', 'households' ); ?><input type="text" name="password" autocomplete="off"></label>
                 <label><?php echo esc_html__( 'Called', 'households' ); ?>
                     <input type="text" name="label" placeholder="<?php echo esc_attr__( 'Grandparent', 'households' ); ?>">
                 </label>

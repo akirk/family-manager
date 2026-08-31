@@ -100,7 +100,7 @@ class App extends BaseApp {
         }
 
         $person_id = Access::person_for_user( $user_id );
-        $homes = $this->storage->get_homes_for_person( $person_id );
+        $homes = $this->storage->get_homes_for_user( $user_id );
         $this->app->add_menu_item( 'index', __( 'Your day', 'households' ), $base );
 
         // Each home is a place you go to, not a mode you switch into.
@@ -108,13 +108,13 @@ class App extends BaseApp {
             $this->app->add_menu_item( 'home-' . $home['id'], $home['name'], $base . $home['id'] . '/' );
         }
 
-        $this->app->add_menu_item( 'homes', __( 'Your homes', 'households' ), $base . 'homes/' );
+        $this->app->add_menu_item( 'homes', __( 'Your households', 'households' ), $base . 'homes/' );
         $this->app->add_menu_item( 'where', __( 'Who is where', 'households' ), $base . 'where/' );
         $this->app->add_menu_item( 'things', __( 'Things', 'households' ), $base . 'things/' );
 
         $open = $this->home_in_view( $user_id );
         if ( $open && Access::can_manage( $user_id, $open ) ) {
-            $this->app->add_menu_item( 'manage', __( 'Manage this home', 'households' ), $base . $open . '/manage/' );
+            $this->app->add_menu_item( 'manage', __( 'Manage this household', 'households' ), $base . $open . '/manage/' );
             foreach ( $this->storage->get_people( $open ) as $person ) {
                 if ( $person['id'] === $person_id ) {
                     continue;
@@ -138,10 +138,31 @@ class App extends BaseApp {
      */
     public function home_in_view( int $user_id ): int {
         $from_url = (int) get_query_var( 'id' );
-        if ( $from_url && Access::is_member( Access::person_for_user( $user_id ), $from_url ) ) {
+        if ( $from_url && Access::can_reach( $user_id, $from_url ) ) {
             return $from_url;
         }
         return $this->storage->last_home_id( $user_id );
+    }
+
+    /**
+     * Put someone at a household, joining them to it if they are not in it yet.
+     *
+     * Saying where someone is is the ordinary way a household gains a person:
+     * the child who stays at their grandparents every other weekend belongs
+     * there from the first weekend they are said to be there. So a move to a
+     * household you organise brings them into it rather than being refused,
+     * and leaving stays what it always was — something said out loud, on the
+     * household's own page.
+     */
+    private function put_person_at( int $person_id, int $home_id ): bool {
+        if ( Access::is_member( $person_id, $home_id ) ) {
+            return true;
+        }
+        if ( ! current_user_can( 'organise_household', $home_id ) ) {
+            return false;
+        }
+        Access::join( $person_id, $home_id );
+        return true;
     }
 
     /**
@@ -177,10 +198,9 @@ class App extends BaseApp {
         }
 
         $user_id = get_current_user_id();
-        $person_id = Access::person_for_user( $user_id );
         $index = home_url( '/' . $this->get_url_path() . '/' );
         $home_id = (int) $matches[1];
-        if ( ! Access::is_member( $person_id, $home_id ) ) {
+        if ( ! Access::can_reach( $user_id, $home_id ) ) {
             wp_safe_redirect( $index );
             exit;
         }
@@ -215,8 +235,8 @@ class App extends BaseApp {
     public function register_post_types(): void {
         register_taxonomy( Access::TAXONOMY, [ Access::PERSON, Storage::FACT, Storage::ITEM, Storage::TASK ], [
             'labels'            => [
-                'name'          => __( 'Homes', 'households' ),
-                'singular_name' => __( 'Home', 'households' ),
+                'name'          => __( 'Households', 'households' ),
+                'singular_name' => __( 'Household', 'households' ),
             ],
             'public'            => false,
             'show_ui'           => current_user_can( 'manage_options' ),
@@ -236,8 +256,8 @@ class App extends BaseApp {
                 'supports' => [ 'title', 'editor', 'revisions', 'author' ],
             ],
             Storage::FACT => [
-                'singular' => __( 'House Fact', 'households' ),
-                'plural'   => __( 'House Facts', 'households' ),
+                'singular' => __( 'Household Fact', 'households' ),
+                'plural'   => __( 'Household Facts', 'households' ),
                 'supports' => [ 'title', 'editor', 'revisions' ],
             ],
             Storage::ITEM => [
@@ -358,8 +378,8 @@ class App extends BaseApp {
             if ( ! $started ) {
                 return $this->refuse( 'no-name' );
             }
-            // A home you have just started is a home with one person in it, so
-            // the next thing anyone does is add the rest.
+            // A home you have just started has nobody in it at all, so the
+            // next thing anyone does is say who is.
             return $this->done( home_url( '/' . $this->get_url_path() . '/' . $started . '/manage/' ) );
         }
 
@@ -368,11 +388,28 @@ class App extends BaseApp {
         // change to anybody's arrangement.
         if ( 'say_where' === $action ) {
             $said_home = $post( 'said_home_id', 'int' );
-            if ( ! $viewer_person || ( $said_home && ! Access::is_member( $viewer_person, $said_home ) ) ) {
+            if ( ! $viewer_person || ( $said_home && ! $this->put_person_at( $viewer_person, $said_home ) ) ) {
                 return $this->refuse();
             }
             Whereabouts::set_override( $viewer_person, $post( 'date' ) ?: current_time( 'Y-m-d' ), $said_home );
             Whereabouts::prune_overrides( $viewer_person );
+            return $this->done();
+        }
+
+        // Which account is this person's. The account itself is made in
+        // WordPress; all that is settled here is who it belongs to, and that is
+        // asked of the person rather than of a household, because it is the
+        // same fact in every one of them. Taking your own away is refused: it
+        // would leave you outside every household you administer with no way
+        // back in.
+        if ( 'assign_user' === $action ) {
+            $person_id = $post( 'person_id', 'int' );
+            if ( ! $person_id || $person_id === $viewer_person || ! Access::can_manage_person( $user_id, $person_id ) ) {
+                return $this->refuse();
+            }
+            if ( ! Access::assign_user( $person_id, $post( 'user_id', 'int' ) ) ) {
+                return $this->refuse();
+            }
             return $this->done();
         }
 
@@ -395,12 +432,12 @@ class App extends BaseApp {
         // is on a page that is about one, or falls back to the last one seen.
         $home_id = $post( 'home_id', 'int' );
         if ( $home_id ) {
-            if ( ! Access::is_member( $viewer_person, $home_id ) ) {
+            if ( ! Access::can_reach( $user_id, $home_id ) ) {
                 return $this->refuse();
             }
         } else {
             $home_id = (int) get_query_var( 'id' );
-            if ( ! $home_id || ! Access::is_member( $viewer_person, $home_id ) ) {
+            if ( ! $home_id || ! Access::can_reach( $user_id, $home_id ) ) {
                 $home_id = $this->storage->last_home_id( $user_id );
             }
         }
@@ -429,7 +466,11 @@ class App extends BaseApp {
             } elseif ( 'clear_rotation' === $action ) {
                 Whereabouts::clear_rotation( $person_id );
             } else {
-                Whereabouts::set_override( $person_id, $post( 'date' ), $post( 'override_home_id', 'int' ) );
+                $target = $post( 'override_home_id', 'int' );
+                if ( $target && ! $this->put_person_at( $person_id, $target ) ) {
+                    return $this->refuse();
+                }
+                Whereabouts::set_override( $person_id, $post( 'date' ), $target );
                 Whereabouts::prune_overrides( $person_id );
             }
             return $this->done();
@@ -448,12 +489,20 @@ class App extends BaseApp {
                     return $this->refuse();
                 }
                 $this->storage->add_person( $home_id, $post( 'name' ), [
-                    'email'     => $post( 'email', 'email' ),
-                    'password'  => $post( 'password', 'raw' ),
                     'is_child'  => (bool) $post( 'is_child', 'int' ),
                     'label'     => $post( 'label' ),
                     'birthdate' => $post( 'birthdate' ),
                 ] );
+                break;
+
+            // A household you set up is one you are outside of until you say
+            // you are in it. Your own record joins; only someone who has never
+            // needed one gets a new one.
+            case 'join_me':
+                if ( ! $can_manage ) {
+                    return $this->refuse();
+                }
+                $this->storage->add_self( $user_id, $home_id );
                 break;
 
             case 'update_person':
@@ -535,7 +584,7 @@ class App extends BaseApp {
 
             case 'move_note':
                 $target = $post( 'target_home_id', 'int' );
-                if ( ! $can_organise || ! Access::is_member( $viewer_person, $target ) ) {
+                if ( ! $can_organise || ! Access::can_reach( $user_id, $target ) ) {
                     return $this->refuse();
                 }
                 $this->storage->move_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'note_id', 'int' ), $target );

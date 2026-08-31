@@ -1,39 +1,43 @@
 <?php
 /**
- * Everyone across the homes you belong to, where they are today, and the
- * fortnight ahead. It spans homes, so it says which one it is reading from.
+ * Everyone across the households you belong to, where they are today, and
+ * the fortnight ahead. It spans households, so it says which one it is
+ * reading from.
  */
 
 namespace Households;
 
 $hh_user = View::user_id();
-$hh_person = View::person_id();
-$hh_homes = View::storage()->get_homes_for_person( $hh_person );
+$hh_homes = View::storage()->get_homes_for_user( $hh_user );
 
-// The home this is read from: the one asked for, if you belong to it, else the
-// last one you looked at.
+// The home this is read from: the one asked for, if it is one of yours, else
+// the last one you looked at.
 $hh_asked = isset( $_GET['home'] ) ? absint( wp_unslash( $_GET['home'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-$hh_home_id = $hh_asked && Access::is_member( $hh_person, $hh_asked ) ? $hh_asked : View::storage()->last_home_id( $hh_user );
+$hh_home_id = $hh_asked && Access::can_reach( $hh_user, $hh_asked ) ? $hh_asked : View::storage()->last_home_id( $hh_user );
 
 $hh_board = $hh_home_id ? View::storage()->get_whereabouts_board( $hh_home_id ) : [];
 $hh_everyone = View::storage()->get_people_overview( $hh_user );
 $hh_organises = $hh_home_id && current_user_can( 'organise_household', $hh_home_id );
+$hh_today = current_time( 'Y-m-d' );
+
+$hh_title = __( 'Who is where', 'households' );
 
 require __DIR__ . '/_head.php';
 ?>
         <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Your day', 'households' ); ?></a>
         <h1><?php echo esc_html__( 'Who is where', 'households' ); ?></h1>
-        <p class="subtitle"><?php echo esc_html__( 'Everyone across the homes you belong to, and where they are today.', 'households' ); ?></p>
+        <p class="subtitle"><?php echo esc_html__( 'Everyone across the households you belong to, and where they are today.', 'households' ); ?></p>
         <?php View::notice(); ?>
 
         <?php if ( ! $hh_board ) : ?>
-            <section><p class="empty"><?php echo esc_html__( 'You do not belong to a home yet.', 'households' ); ?></p></section>
+            <section><p class="empty"><?php echo esc_html__( 'You do not have a household yet.', 'households' ); ?></p></section>
             <?php require __DIR__ . '/_foot.php'; ?>
             <?php return; ?>
         <?php endif; ?>
 
         <section>
             <h2><?php echo esc_html__( 'Everyone', 'households' ); ?></h2>
+            <p class="meta"><?php echo esc_html__( 'Move someone to another household to say where they are today. It is about today alone and leaves the pattern alone; somewhere they have never been, they join by being sent there.', 'households' ); ?></p>
             <ul class="plain">
                 <?php foreach ( $hh_everyone as $hh_one ) : ?>
                     <li class="row">
@@ -54,12 +58,71 @@ require __DIR__ . '/_head.php';
                                     <span class="pill warm"><?php echo esc_html__( 'No account', 'households' ); ?></span>
                                 <?php endif; ?>
                             </div>
+                            <?php
+                            // Saying where you are is something anyone may do
+                            // about themselves. Saying it about someone else is
+                            // organising, so it goes through a household you
+                            // organise and they belong to — the first one that
+                            // is both, since which one it is asked through
+                            // changes nothing about the answer.
+                            $hh_via = 0;
+                            foreach ( $hh_one['homes'] as $hh_their ) {
+                                if ( current_user_can( 'organise_household', $hh_their['id'] ) ) {
+                                    $hh_via = (int) $hh_their['id'];
+                                    break;
+                                }
+                            }
+                            $hh_may_move = $hh_one['is_you'] || $hh_via;
+
+                            // Where they could be: their own households, and
+                            // any of yours you organise. Somewhere they have
+                            // never been is still somewhere they can be sent —
+                            // the first weekend at the grandparents is a move
+                            // before it is an arrangement — and being sent puts
+                            // them in it.
+                            $hh_targets = $hh_one['homes'];
+                            $hh_ids = wp_list_pluck( $hh_targets, 'id' );
+                            foreach ( $hh_homes as $hh_mine ) {
+                                if ( ! in_array( $hh_mine['id'], $hh_ids, true ) && current_user_can( 'organise_household', $hh_mine['id'] ) ) {
+                                    $hh_targets[] = $hh_mine;
+                                }
+                            }
+                            usort( $hh_targets, static function( array $a, array $b ): int {
+                                return strcasecmp( $a['name'], $b['name'] );
+                            } );
+                            ?>
+                            <?php if ( $hh_may_move && ( count( $hh_targets ) > 1 || $hh_one['said'] ) ) : ?>
+                                <form method="post" class="actions" style="margin-top:6px">
+                                    <?php
+                                    View::fields(
+                                        $hh_one['is_you'] ? 'say_where' : 'set_override',
+                                        $hh_one['is_you']
+                                            ? [ 'date' => $hh_today ]
+                                            : [ 'home_id' => $hh_via, 'person_id' => $hh_one['id'], 'date' => $hh_today ]
+                                    );
+                                    $hh_field = $hh_one['is_you'] ? 'said_home_id' : 'override_home_id';
+                                    ?>
+                                    <?php foreach ( $hh_targets as $hh_their ) : ?>
+                                        <?php $hh_at_it = $hh_one['location']['home_id'] === $hh_their['id']; ?>
+                                        <button type="submit" name="<?php echo esc_attr( $hh_field ); ?>" value="<?php echo (int) $hh_their['id']; ?>"
+                                            class="<?php echo $hh_at_it ? 'primary' : ''; ?>"
+                                            aria-pressed="<?php echo $hh_at_it ? 'true' : 'false'; ?>">
+                                            <?php echo esc_html( $hh_their['name'] ); ?>
+                                        </button>
+                                    <?php endforeach; ?>
+                                    <?php if ( $hh_one['said'] ) : ?>
+                                        <button type="submit" name="<?php echo esc_attr( $hh_field ); ?>" value="0" class="quiet">
+                                            <?php echo $hh_one['rotates'] ? esc_html__( 'Back to the pattern', 'households' ) : esc_html__( 'Elsewhere', 'households' ); ?>
+                                        </button>
+                                    <?php endif; ?>
+                                </form>
+                            <?php endif; ?>
                         </div>
                         <?php // Somewhere known, or honestly nowhere: guessing would read as an answer. ?>
                         <?php if ( $hh_one['location']['known'] ) : ?>
                             <span class="pill">
                                 <?php
-                                /* translators: %s: the name of a home. */
+                                /* translators: %s: the name of a household. */
                                 echo esc_html( sprintf( __( 'at %s', 'households' ), $hh_one['location']['name'] ) );
                                 ?>
                             </span>
@@ -75,13 +138,13 @@ require __DIR__ . '/_head.php';
             <h2><?php echo esc_html__( 'The next fortnight', 'households' ); ?></h2>
             <p class="meta">
                 <?php
-                /* translators: %s: the name of a home. */
+                /* translators: %s: the name of a household. */
                 echo esc_html( sprintf( __( 'Read from %s.', 'households' ), $hh_board['home']['name'] ) );
                 ?>
             </p>
             <?php if ( count( $hh_homes ) > 1 ) : ?>
                 <p class="meta">
-                    <?php echo esc_html__( 'Look at another home', 'households' ); ?>
+                    <?php echo esc_html__( 'Look at another household', 'households' ); ?>
                     <?php foreach ( $hh_homes as $hh_home ) : ?>
                         <?php if ( $hh_home['id'] !== $hh_board['home']['id'] ) : ?>
                             <a style="margin-right:8px" href="<?php echo esc_url( add_query_arg( 'home', $hh_home['id'], View::base() . 'where/' ) ); ?>"><?php echo esc_html( $hh_home['name'] ); ?></a>
@@ -197,7 +260,7 @@ require __DIR__ . '/_head.php';
         <?php if ( $hh_organises && $hh_rotating ) : ?>
             <section>
                 <h2><?php echo esc_html__( 'Rotations', 'households' ); ?></h2>
-                <p class="meta"><?php echo esc_html__( 'A rotation names its homes in order and repeats a cycle of days. It is stored on the person, so every home reads the same answer.', 'households' ); ?></p>
+                <p class="meta"><?php echo esc_html__( 'A rotation names its households in order and repeats a cycle of days. It is stored on the person, so every household reads the same answer.', 'households' ); ?></p>
                 <?php foreach ( $hh_rotating as $hh_one ) : ?>
                     <div style="border-top:1px solid var(--hh-line);padding-top:12px;margin-top:12px">
                         <form method="post" class="grid">
@@ -219,7 +282,7 @@ require __DIR__ . '/_head.php';
                                 <input type="time" name="changeover_time" value="<?php echo esc_attr( $hh_one['rotation']['changeover_time'] ?? Whereabouts::DEFAULT_CHANGEOVER_TIME ); ?>">
                             </label>
                             <div class="wide">
-                                <div class="meta"><?php echo esc_html__( 'Homes, in order', 'households' ); ?></div>
+                                <div class="meta"><?php echo esc_html__( 'Households, in order', 'households' ); ?></div>
                                 <div class="actions">
                                     <?php foreach ( $hh_one['homes'] as $hh_home ) : ?>
                                         <label class="inline">

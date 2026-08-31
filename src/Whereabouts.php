@@ -50,25 +50,25 @@ class Whereabouts {
             self::PATTERN_WEEK => [
                 'label'      => __( 'Week on, week off', 'households' ),
                 'cycle'      => [ 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1 ],
-                'start_hint' => __( 'Pick the day a week at the first home begins.', 'households' ),
+                'start_hint' => __( 'Pick the day a week at the first household begins.', 'households' ),
                 'homes'      => 2,
             ],
             self::PATTERN_2_2_3 => [
                 'label'      => __( '2-2-3', 'households' ),
                 'cycle'      => [ 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1 ],
-                'start_hint' => __( 'Pick a Monday at the first home; the long weekend alternates.', 'households' ),
+                'start_hint' => __( 'Pick a Monday at the first household; the long weekend alternates.', 'households' ),
                 'homes'      => 2,
             ],
             self::PATTERN_ALTERNATE_WEEKENDS => [
                 'label'      => __( 'Every other weekend', 'households' ),
                 'cycle'      => [ 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
-                'start_hint' => __( 'Pick a Friday spent at the second home.', 'households' ),
+                'start_hint' => __( 'Pick a Friday spent at the second household.', 'households' ),
                 'homes'      => 2,
             ],
             self::PATTERN_CUSTOM => [
                 'label'      => __( 'Custom two weeks', 'households' ),
                 'cycle'      => [ 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1 ],
-                'start_hint' => __( 'Set each of the fourteen days yourself, across every home in the list.', 'households' ),
+                'start_hint' => __( 'Set each of the fourteen days yourself, across every household in the list.', 'households' ),
                 'homes'      => 0,
             ],
         ];

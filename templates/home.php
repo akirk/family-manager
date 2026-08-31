@@ -12,6 +12,8 @@ $hh_user = View::user_id();
 $hh_subject = App::subject_for_page( $hh_user );
 $hh = View::storage()->get_dashboard( $hh_user, $hh_home_id, $hh_subject );
 
+$hh_title = $hh ? $hh['home']['name'] : __( 'A household', 'households' );
+
 require __DIR__ . '/_head.php';
 
 if ( ! $hh ) {
@@ -47,7 +49,7 @@ $hh_writing = $hh_can_organise && ! $hh['viewer']['viewing_as'];
                 <strong>
                     <?php
                     /* translators: %s: a name. */
-                    echo esc_html( sprintf( __( 'You are looking at this home as %s sees it.', 'households' ), $hh['subject']['name'] ) );
+                    echo esc_html( sprintf( __( 'You are looking at this household as %s sees it.', 'households' ), $hh['subject']['name'] ) );
                     ?>
                 </strong>
             </section>
@@ -119,8 +121,8 @@ $hh_writing = $hh_can_organise && ! $hh['viewer']['viewing_as'];
         </section>
 
         <section>
-            <h2><?php echo esc_html__( 'About this home', 'households' ); ?></h2>
-            <p class="meta"><?php echo esc_html__( 'What the house needs you to know: the wifi, where the water main valve is, which day the bins go out.', 'households' ); ?></p>
+            <h2><?php echo esc_html__( 'About this household', 'households' ); ?></h2>
+            <p class="meta"><?php echo esc_html__( 'What the household needs you to know: the wifi, where the water main valve is, which day the bins go out.', 'households' ); ?></p>
             <ul class="plain">
                 <?php if ( ! $hh['facts'] ) : ?>
                     <li class="empty"><?php echo esc_html__( 'Nothing written down yet.', 'households' ); ?></li>
@@ -171,7 +173,7 @@ $hh_writing = $hh_can_organise && ! $hh['viewer']['viewing_as'];
                                     <?php if ( $hh_other['id'] !== $hh['home']['id'] ) : ?>
                                         <button type="submit" class="quiet" name="target_home_id" value="<?php echo (int) $hh_other['id']; ?>">
                                             <?php
-                                            /* translators: %s: the name of a home. */
+                                            /* translators: %s: the name of a household. */
                                             echo esc_html( sprintf( __( 'Move to %s', 'households' ), $hh_other['name'] ) );
                                             ?>
                                         </button>
