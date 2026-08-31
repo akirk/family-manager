@@ -571,6 +571,47 @@ class Storage {
     /* ---------------------------------------------------------------- Tasks */
 
     /**
+     * How long something ticked off stays on the list before it goes quiet.
+     * A tick is not a disappearance: what was ticked stays where it was, struck
+     * through, long enough to notice a wrong one and take it back.
+     */
+    public const DONE_KEPT_DAYS = 7;
+
+    /**
+     * The moment before which what was ticked off is no longer kept in view.
+     * Said in the site's own time, because that is the time a tick is written
+     * down in and the two are compared as they are stored.
+     */
+    public static function done_cutoff(): string {
+        $now = new \DateTimeImmutable( 'now', wp_timezone() );
+        return $now->modify( '-' . self::DONE_KEPT_DAYS . ' days' )->format( 'Y-m-d H:i:s' );
+    }
+
+    /**
+     * A list as it is read: what is open, what was ticked off within the week,
+     * and — asked for — everything ticked off before that too. What was left
+     * out is counted, because that count is what offers to show it.
+     *
+     * @param array[] $tasks as `get_tasks` says them.
+     * @return array{tasks: array[], quiet: int}
+     */
+    public static function sift_tasks( array $tasks, bool $earlier = false ): array {
+        $cutoff = self::done_cutoff();
+        $kept = [];
+        $quiet = 0;
+        foreach ( $tasks as $task ) {
+            if ( $task['is_done'] && $task['done_at'] < $cutoff ) {
+                ++$quiet;
+                if ( ! $earlier ) {
+                    continue;
+                }
+            }
+            $kept[] = $task;
+        }
+        return [ 'tasks' => $kept, 'quiet' => $quiet ];
+    }
+
+    /**
      * A task belongs to a home, and either to one person in it or to the house
      * as a whole. The person is the post's parent, so "everything assigned to
      * her" is one indexed lookup rather than a search.
@@ -598,6 +639,33 @@ class Storage {
         return $task_id;
     }
 
+    /**
+     * The same four answers again, about a task already written down. Anything
+     * left blank is blank on purpose: the form says all of it every time, so a
+     * date taken off is a date taken off rather than a field not mentioned.
+     */
+    public function edit_task( int $home_id, int $task_id, string $title, int $person_id = 0, string $task_type = 'task', string $due_date = '' ): bool {
+        $post = get_post( $task_id );
+        if ( ! $post || self::TASK !== $post->post_type || ! in_array( $home_id, $this->home_ids_of_post( $task_id ), true ) ) {
+            return false;
+        }
+        $title = sanitize_text_field( $title );
+        if ( '' === trim( $title ) ) {
+            return false;
+        }
+        if ( $person_id && ! Access::is_member( $person_id, $home_id ) ) {
+            $person_id = 0;
+        }
+        wp_update_post( [
+            'ID'          => $task_id,
+            'post_parent' => $person_id,
+            'post_title'  => $title,
+        ] );
+        update_post_meta( $task_id, self::META_TASK_TYPE, in_array( $task_type, [ 'task', 'appointment' ], true ) ? $task_type : 'task' );
+        update_post_meta( $task_id, self::META_DUE_DATE, $this->normalize_date( $due_date ) );
+        return true;
+    }
+
     /** @return array[] open first, then by due date. */
     public function get_tasks( int $home_id ): array {
         $tasks = [];
@@ -608,6 +676,7 @@ class Storage {
             }
             $person_id = (int) $post->post_parent;
             $person = $person_id ? get_post( $person_id ) : null;
+            $done_at = (string) get_post_meta( $post->ID, self::META_DONE_AT, true );
             $tasks[] = [
                 'id'        => (int) $post->ID,
                 'title'     => $post->post_title,
@@ -615,12 +684,20 @@ class Storage {
                 'person'    => $person ? $person->post_title : '',
                 'task_type' => get_post_meta( $post->ID, self::META_TASK_TYPE, true ) ?: 'task',
                 'due_date'  => (string) get_post_meta( $post->ID, self::META_DUE_DATE, true ),
-                'is_done'   => '' !== (string) get_post_meta( $post->ID, self::META_DONE_AT, true ),
+                // When it was ticked off, so a list can keep the recent ones
+                // in view and let the rest go quiet.
+                'done_at'   => $done_at,
+                'is_done'   => '' !== $done_at,
             ];
         }
         usort( $tasks, static function( array $a, array $b ): int {
             if ( $a['is_done'] !== $b['is_done'] ) {
                 return (int) $a['is_done'] <=> (int) $b['is_done'];
+            }
+            if ( $a['is_done'] ) {
+                // Among what is done, the thing ticked last: the one still
+                // worth a second look.
+                return strcmp( $b['done_at'], $a['done_at'] );
             }
             return strcmp( $a['due_date'] ?: '9999-12-31', $b['due_date'] ?: '9999-12-31' );
         } );

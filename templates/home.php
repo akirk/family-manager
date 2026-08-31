@@ -23,6 +23,21 @@ if ( ! $hh ) {
 
 $hh_can_organise = $hh['viewer']['can_organise'];
 $hh_writing = $hh_can_organise && ! $hh['viewer']['viewing_as'];
+
+// The list reads the way it reads on the overview, and asks the same three
+// things of the URL: what was ticked off before this week, whether the form for
+// a new one is open, and which row is open to be written.
+// phpcs:disable WordPress.Security.NonceVerification.Recommended
+$hh_earlier = ! empty( $_GET['earlier'] );
+$hh_adding = ! empty( $_GET['add'] );
+$hh_editing = isset( $_GET['edit'] ) ? (int) $_GET['edit'] : 0;
+// phpcs:enable WordPress.Security.NonceVerification.Recommended
+$hh_url = remove_query_arg( 'problem' );
+$hh_open = add_query_arg( 'add', 1, $hh_url );
+$hh_close = remove_query_arg( 'add', $hh_url );
+$hh_sifted = Storage::sift_tasks( $hh['tasks'], $hh_earlier );
+$hh_tasks = $hh_sifted['tasks'];
+$hh_quiet = $hh_sifted['quiet'];
 ?>
         <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Overview', 'households' ); ?></a>
         <h1><?php echo esc_html( $hh['home']['name'] ); ?></h1>
@@ -55,71 +70,73 @@ $hh_writing = $hh_can_organise && ! $hh['viewer']['viewing_as'];
             </section>
         <?php endif; ?>
 
-        <section>
-            <?php // Writing something down belongs on the section's own line, so a section with nothing in it is one line rather than three. ?>
+        <section id="hh-todo" data-hh-live-section>
             <div class="row heading">
                 <h2><?php echo esc_html__( 'To do', 'households' ); ?></h2>
-                <?php if ( $hh_writing ) : ?>
-                    <details class="add">
-                        <summary><?php echo esc_html__( '+ Add', 'households' ); ?></summary>
-                        <form method="post" class="grid">
-                            <?php View::fields( 'add_task' ); ?>
-                            <label class="wide"><?php echo esc_html__( 'What needs doing', 'households' ); ?>
-                                <input type="text" name="title" required>
-                            </label>
-                            <label><?php echo esc_html__( 'For whom', 'households' ); ?>
-                                <select name="person_id">
-                                    <option value="0"><?php echo esc_html__( 'Everyone', 'households' ); ?></option>
-                                    <?php foreach ( $hh['people'] as $hh_person ) : ?>
-                                        <option value="<?php echo (int) $hh_person['id']; ?>"><?php echo esc_html( $hh_person['name'] ); ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </label>
-                            <label><?php echo esc_html__( 'Kind', 'households' ); ?>
-                                <select name="task_type">
-                                    <option value="task"><?php echo esc_html__( 'Task', 'households' ); ?></option>
-                                    <option value="appointment"><?php echo esc_html__( 'Appointment', 'households' ); ?></option>
-                                </select>
-                            </label>
-                            <label><?php echo esc_html__( 'When', 'households' ); ?>
-                                <input type="date" name="due_date">
-                            </label>
-                            <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-                        </form>
-                    </details>
-                <?php elseif ( ! $hh['tasks'] ) : ?>
-                    <span class="meta"><?php echo esc_html__( 'Nothing to do.', 'households' ); ?></span>
-                <?php endif; ?>
+                <div class="actions">
+                    <?php // Offered while there is a list to filter; an empty one says where the rest went in words instead. ?>
+                    <?php if ( ( $hh_tasks && $hh_quiet ) || $hh_earlier ) : ?>
+                        <a class="pill" data-hh-live
+                            href="<?php echo esc_url( $hh_earlier ? remove_query_arg( 'earlier', $hh_url ) : add_query_arg( 'earlier', 1, $hh_url ) ); ?>">
+                            <?php echo $hh_earlier ? esc_html__( 'the past week', 'households' ) : esc_html__( 'done earlier', 'households' ); ?>
+                        </a>
+                    <?php endif; ?>
+                    <?php if ( $hh_writing ) : ?>
+                        <?php // A link that asks the page for the form; the script opens the one already here instead. ?>
+                        <a class="pill" data-hh-add href="<?php echo esc_url( $hh_adding ? $hh_close : $hh_open ); ?>"
+                            data-hh-open="<?php echo esc_url( $hh_open ); ?>" data-hh-close="<?php echo esc_url( $hh_close ); ?>"
+                            aria-controls="add" aria-expanded="<?php echo $hh_adding ? 'true' : 'false'; ?>"
+                            aria-label="<?php echo esc_attr__( 'Write something down', 'households' ); ?>"><?php echo $hh_adding ? '&times;' : '+'; ?></a>
+                    <?php endif; ?>
+                </div>
             </div>
+
+            <?php if ( $hh_writing ) : ?>
+                <form method="post" class="grid" id="add" style="margin-bottom:12px" <?php echo $hh_adding ? '' : 'hidden'; ?>>
+                    <?php View::fields( 'add_task', [ 'home_id' => $hh_home_id ] ); ?>
+                    <label class="wide"><?php echo esc_html__( 'What needs doing', 'households' ); ?>
+                        <input type="text" name="title" required <?php echo $hh_adding ? 'autofocus' : ''; ?>>
+                    </label>
+                    <label><?php echo esc_html__( 'For whom', 'households' ); ?>
+                        <select name="person_id">
+                            <option value="0"><?php echo esc_html__( 'Everyone', 'households' ); ?></option>
+                            <?php foreach ( $hh['people'] as $hh_person ) : ?>
+                                <option value="<?php echo (int) $hh_person['id']; ?>"><?php echo esc_html( $hh_person['name'] ); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                    <label><?php echo esc_html__( 'Kind', 'households' ); ?>
+                        <select name="task_type">
+                            <option value="task"><?php echo esc_html__( 'Task', 'households' ); ?></option>
+                            <option value="appointment"><?php echo esc_html__( 'Appointment', 'households' ); ?></option>
+                        </select>
+                    </label>
+                    <label><?php echo esc_html__( 'When', 'households' ); ?>
+                        <input type="date" name="due_date">
+                    </label>
+                    <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
+                </form>
+            <?php endif; ?>
+
             <ul class="plain">
-                <?php foreach ( $hh['tasks'] as $hh_task ) : ?>
-                    <?php
-                    $hh_bits = [ $hh_task['person'] ? $hh_task['person'] : __( 'Everyone', 'households' ) ];
-                    if ( $hh_task['due_date'] ) {
-                        $hh_bits[] = View::date( $hh_task['due_date'] );
-                    }
-                    if ( 'appointment' === $hh_task['task_type'] ) {
-                        $hh_bits[] = __( 'Appointment', 'households' );
-                    }
-                    ?>
-                    <li class="row">
-                        <form method="post" class="actions grow">
-                            <?php View::fields( 'toggle_task', [ 'task_id' => $hh_task['id'] ] ); ?>
-                            <button type="submit" class="quiet">
-                                <?php echo $hh_task['is_done'] ? esc_html__( 'Undo', 'households' ) : esc_html__( 'Done', 'households' ); ?>
-                            </button>
-                            <span class="<?php echo $hh_task['is_done'] ? 'done' : ''; ?>">
-                                <?php echo esc_html( $hh_task['title'] ); ?>
-                                <span class="meta">· <?php echo esc_html( implode( ' · ', $hh_bits ) ); ?></span>
-                            </span>
-                        </form>
-                        <?php if ( $hh_writing ) : ?>
-                            <form method="post">
-                                <?php View::fields( 'remove_task', [ 'task_id' => $hh_task['id'] ] ); ?>
-                                <button type="submit" class="quiet"><?php echo esc_html__( 'Remove', 'households' ); ?></button>
-                            </form>
+                <?php if ( ! $hh_tasks ) : ?>
+                    <li class="empty">
+                        <?php echo esc_html__( 'Nothing to do.', 'households' ); ?>
+                        <?php // An empty list with something behind it says where the rest went; this is the one place you would look for it. ?>
+                        <?php if ( $hh_quiet && ! $hh_earlier ) : ?>
+                            <a data-hh-live href="<?php echo esc_url( add_query_arg( 'earlier', 1, $hh_url ) ); ?>"><?php echo esc_html__( 'See what was done earlier.', 'households' ); ?></a>
                         <?php endif; ?>
                     </li>
+                <?php endif; ?>
+                <?php
+                $hh_task_home = $hh_home_id;
+                $hh_task_url = $hh_url;
+                $hh_task_people = $hh['people'];
+                $hh_task_writing = $hh_writing;
+                $hh_task_editing = $hh_editing;
+                ?>
+                <?php foreach ( $hh_tasks as $hh_task ) : ?>
+                    <?php require __DIR__ . '/_task.php'; ?>
                 <?php endforeach; ?>
             </ul>
 
@@ -229,4 +246,6 @@ $hh_writing = $hh_can_organise && ! $hh['viewer']['viewing_as'];
                 </ul>
             </section>
         <?php endif; ?>
+
+<?php require __DIR__ . '/_todo-script.php'; ?>
 <?php require __DIR__ . '/_foot.php'; ?>

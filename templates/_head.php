@@ -126,6 +126,14 @@ $hh_title = isset( $hh_title ) && '' !== trim( $hh_title ) ? $hh_title : __( 'Ho
         /* Prose somebody typed, kept with the line breaks they typed. */
         p.note { margin: 8px 0 0; white-space: pre-wrap; }
         .done { text-decoration: line-through; color: var(--hh-muted); }
+        /* Something offered about one line rather than about the list: it waits
+           to be pointed at, and is out of the way of reading until it is. Where
+           there is no pointer there is no hover, so it is simply there; the
+           space it takes is kept either way, so no row moves under the cursor. */
+        @media (hover: hover) {
+            .row .onhover { opacity: 0; pointer-events: none; transition: opacity 0.12s ease-in-out; }
+            .row:hover .onhover, .row:focus-within .onhover { opacity: 1; pointer-events: auto; }
+        }
         form.inline { display: inline; }
         .actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
         .grow { flex: 1 1 240px; }

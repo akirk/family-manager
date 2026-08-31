@@ -25,16 +25,25 @@ $hh_party = $hh_me ? $hh_day['party'] : [];
 // phpcs:disable WordPress.Security.NonceVerification.Recommended
 $hh_mine = ! empty( $_GET['mine'] );
 $hh_adding = ! empty( $_GET['add'] );
+// Everything ever ticked off here, rather than the last week of it.
+$hh_earlier = ! empty( $_GET['earlier'] );
+// Which row is open to be written, if any.
+$hh_editing = isset( $_GET['edit'] ) ? (int) $_GET['edit'] : 0;
 // phpcs:enable WordPress.Security.NonceVerification.Recommended
 $hh_url = remove_query_arg( 'problem' );
 
-$hh_tasks = [];
+// Whose the list is is the viewer's question and asked here; what is still
+// worth seeing of what is done is the list's own, and asked the same way
+// wherever a list is read.
+$hh_ours = [];
 foreach ( isset( $hh_here['tasks'] ) ? $hh_here['tasks'] : [] as $hh_task ) {
-    if ( $hh_task['is_done'] || ( $hh_mine && $hh_task['person_id'] !== $hh_me ) ) {
-        continue;
+    if ( ! $hh_mine || $hh_task['person_id'] === $hh_me ) {
+        $hh_ours[] = $hh_task;
     }
-    $hh_tasks[] = $hh_task;
 }
+$hh_sifted = Storage::sift_tasks( $hh_ours, $hh_earlier );
+$hh_tasks = $hh_sifted['tasks'];
+$hh_quiet = $hh_sifted['quiet'];
 $hh_can_add = ! empty( $hh_here['viewer']['can_organise'] );
 $hh_open = add_query_arg( 'add', 1, $hh_url );
 $hh_close = remove_query_arg( 'add', $hh_url );
@@ -59,7 +68,7 @@ require __DIR__ . '/_head.php';
 
         <div class="columns">
             <div>
-                <section id="hh-todo">
+                <section id="hh-todo" data-hh-live-section>
                     <div class="row heading">
                         <h2>
                             <?php
@@ -79,6 +88,13 @@ require __DIR__ . '/_head.php';
                                     href="<?php echo esc_url( $hh_mine ? remove_query_arg( 'mine', $hh_url ) : add_query_arg( 'mine', 1, $hh_url ) ); ?>">
                                     <?php echo $hh_mine ? esc_html__( 'everyone', 'households' ) : esc_html__( 'just me', 'households' ); ?>
                                 </a>
+                                <?php // A filter over a list you are reading, so it waits for there to be one: an empty list says where the rest went in words instead. ?>
+                                <?php if ( ( $hh_tasks && $hh_quiet ) || $hh_earlier ) : ?>
+                                    <a class="pill" data-hh-live
+                                        href="<?php echo esc_url( $hh_earlier ? remove_query_arg( 'earlier', $hh_url ) : add_query_arg( 'earlier', 1, $hh_url ) ); ?>">
+                                        <?php echo $hh_earlier ? esc_html__( 'the past week', 'households' ) : esc_html__( 'done earlier', 'households' ); ?>
+                                    </a>
+                                <?php endif; ?>
                                 <?php if ( $hh_can_add ) : ?>
                                     <?php // A link that asks the page for the form; the script opens the one already here instead. ?>
                                     <a class="pill" data-hh-add href="<?php echo esc_url( $hh_adding ? $hh_close : $hh_open ); ?>"
@@ -127,9 +143,19 @@ require __DIR__ . '/_head.php';
                                     ? esc_html__( 'Nothing here is asked of you.', 'households' )
                                     : esc_html__( 'Nothing to do here.', 'households' );
                                 ?>
+                                <?php // An empty list with something behind it says where the rest went; the pill above it is the same door, and this is the one place you would look for it. ?>
+                                <?php if ( $hh_quiet && ! $hh_earlier ) : ?>
+                                    <a data-hh-live href="<?php echo esc_url( add_query_arg( 'earlier', 1, $hh_url ) ); ?>"><?php echo esc_html__( 'See what was done earlier.', 'households' ); ?></a>
+                                <?php endif; ?>
                             </li>
                         <?php endif; ?>
-                        <?php $hh_task_home = $hh_where['home_id']; ?>
+                        <?php
+                        $hh_task_home = $hh_where['home_id'];
+                        $hh_task_url = $hh_url;
+                        $hh_task_people = isset( $hh_here['people'] ) ? $hh_here['people'] : [];
+                        $hh_task_writing = $hh_can_add;
+                        $hh_task_editing = $hh_editing;
+                        ?>
                         <?php foreach ( $hh_tasks as $hh_task ) : ?>
                             <?php require __DIR__ . '/_task.php'; ?>
                         <?php endforeach; ?>
@@ -235,7 +261,7 @@ require __DIR__ . '/_head.php';
                     </ul>
                 </section>
 
-                <section id="hh-agenda">
+                <section id="hh-agenda" data-hh-live-section>
                     <h2><a href="<?php echo esc_url( View::base() . 'where/' ); ?>"><?php echo esc_html__( 'Who is where', 'households' ); ?></a></h2>
                     <ul class="plain">
                         <?php if ( ! $hh_day['agenda'] ) : ?>
@@ -297,146 +323,6 @@ require __DIR__ . '/_head.php';
         <?php endif; ?>
 
 <?php if ( $hh_homes ) : ?>
-<script>
-/*
- * The list already works without this. The + is a link asking for the page with
- * the form open, whose list it is is another, ticking something is a form, and
- * writing something down posts and comes back to a page read afresh. All the
- * script does is spare the page going away and coming back: the form is already
- * here, so showing it is an attribute rather than a request, and everything
- * asked for is asked of the same URLs, with the sections the server rendered in
- * reply put back in. Nothing is worked out here that the server has not worked
- * out already.
- */
-( function () {
-    var live = [ 'hh-todo', 'hh-agenda' ];
-    if ( ! document.getElementById( 'hh-todo' ) || ! window.fetch || ! window.DOMParser || ! window.FormData ) {
-        return;
-    }
-
-    // Said on the document, so the buttons that are only there for a page with
-    // no script go quiet — and stay quiet however often a section is exchanged.
-    document.documentElement.setAttribute( 'data-hh-live', '' );
-
-    function swap( html ) {
-        // The server has no idea the form is open — that is not in the URL and
-        // does not belong there — so what came back has it shut, and it is put
-        // back the way it was found.
-        var form = document.getElementById( 'add' );
-        var was = form && ! form.hidden;
-        var fresh = new DOMParser().parseFromString( html, 'text/html' );
-        live.forEach( function ( id ) {
-            var here = document.getElementById( id );
-            var came = fresh.getElementById( id );
-            if ( here && came ) {
-                here.replaceWith( came );
-            }
-        } );
-        if ( was ) {
-            reveal( true );
-        }
-    }
-
-    /** Show the form, or hide it, and leave the + saying what it would do next. */
-    function reveal( show ) {
-        var form = document.getElementById( 'add' );
-        var link = document.querySelector( '#hh-todo a[data-hh-add]' );
-        if ( ! form || ! link ) {
-            return;
-        }
-        form.hidden = ! show;
-        link.textContent = show ? '\u00d7' : '+';
-        link.setAttribute( 'aria-expanded', show ? 'true' : 'false' );
-        link.href = link.getAttribute( show ? 'data-hh-close' : 'data-hh-open' );
-    }
-
-    function load( url, form ) {
-        var busy = document.getElementById( 'hh-todo' );
-        busy.setAttribute( 'aria-busy', 'true' );
-        fetch( url, form
-            ? { method: 'POST', body: new FormData( form ), credentials: 'same-origin' }
-            : { credentials: 'same-origin' } )
-            .then( function ( response ) {
-                if ( ! response.ok ) {
-                    throw new Error( String( response.status ) );
-                }
-                return response.text();
-            } )
-            .then( function ( html ) {
-                swap( html );
-                // Written down and gone from the fields: the next one is
-                // expected, so the cursor is put back where it was. Ticking
-                // something off is not that, and takes no cursor anywhere.
-                var again = form && 'add' === form.id
-                    ? document.querySelector( '#hh-todo form#add:not([hidden]) input[name="title"]' )
-                    : null;
-                if ( again ) {
-                    again.focus();
-                }
-            } )
-            // Anything unexpected hands the page back to the browser, which has
-            // known how to do this all along.
-            .catch( function () {
-                if ( form ) {
-                    form.submit();
-                } else {
-                    window.location.href = url;
-                }
-            } );
-    }
-
-    // Listening is done once, from outside what gets exchanged, so no amount of
-    // swapping can leave a form posting twice or a link doing nothing.
-    document.addEventListener( 'submit', function ( event ) {
-        var form = event.target.closest( '#hh-todo form' );
-        if ( ! form ) {
-            return;
-        }
-        event.preventDefault();
-        load( window.location.href, form );
-    } );
-
-    // A box being ticked is the form it is in being posted; the button beside it
-    // says the same thing to a page that never ran this.
-    document.addEventListener( 'change', function ( event ) {
-        var box = event.target.closest( '#hh-todo input[data-hh-tick]' );
-        if ( ! box || ! box.form ) {
-            return;
-        }
-        load( window.location.href, box.form );
-    } );
-
-    // Whose list it is is a link like any other; it is only the page around it
-    // that need not be fetched again to answer it.
-    document.addEventListener( 'click', function ( event ) {
-        var link = event.target.closest( '#hh-todo a[data-hh-live]' );
-        if ( ! link ) {
-            return;
-        }
-        event.preventDefault();
-        window.history.replaceState( {}, '', link.href );
-        load( link.href, null );
-    } );
-
-    // Opening the form changes nothing anybody could be sent or reload into, so
-    // it changes nothing about the URL either. It is a form being shown.
-    document.addEventListener( 'click', function ( event ) {
-        var link = event.target.closest( '#hh-todo a[data-hh-add]' );
-        var form = document.getElementById( 'add' );
-        if ( ! link || ! form ) {
-            return;
-        }
-        event.preventDefault();
-        var opening = form.hidden;
-        reveal( opening );
-        if ( opening ) {
-            var title = form.querySelector( 'input[name="title"]' );
-            if ( title ) {
-                title.focus();
-            }
-        }
-    } );
-}() );
-</script>
+    <?php require __DIR__ . '/_todo-script.php'; ?>
 <?php endif; ?>
 <?php require __DIR__ . '/_foot.php'; ?>
