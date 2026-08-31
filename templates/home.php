@@ -1,230 +1,218 @@
 <?php
-$hh_home_id = (int) get_query_var( 'id' );
-$hh_view_as = (int) get_query_var( 'person_id' );
-require __DIR__ . '/_head.php';
-?>
-        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Your day', 'households' ); ?></a>
-        <h1 data-home-name><?php echo esc_html__( 'Home', 'households' ); ?></h1>
-        <p class="subtitle" data-here></p>
-        <div class="status" data-status><?php echo esc_html__( 'Loading…', 'households' ); ?></div>
+/**
+ * One home: its people, what needs doing, what the house needs you to know,
+ * and what is kept there. Everything on it is written down in this home, so
+ * every form here posts back to this page.
+ */
 
-        <section data-viewing-as hidden>
-            <strong data-viewing-as-text></strong>
-        </section>
+namespace Households;
+
+$hh_home_id = (int) get_query_var( 'id' );
+$hh_user = View::user_id();
+$hh_subject = App::subject_for_page( $hh_user );
+$hh = View::storage()->get_dashboard( $hh_user, $hh_home_id, $hh_subject );
+
+require __DIR__ . '/_head.php';
+
+if ( ! $hh ) {
+    require __DIR__ . '/_foot.php';
+    return;
+}
+
+$hh_can_organise = $hh['viewer']['can_organise'];
+$hh_writing = $hh_can_organise && ! $hh['viewer']['viewing_as'];
+?>
+        <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Your day', 'households' ); ?></a>
+        <h1><?php echo esc_html( $hh['home']['name'] ); ?></h1>
+        <p class="subtitle">
+            <?php
+            $hh_here = wp_list_pluck( $hh['here'], 'name' );
+            echo $hh_here
+                ? esc_html__( 'Here today:', 'households' ) . ' ' . esc_html( implode( ', ', $hh_here ) ) . '.'
+                : esc_html__( 'Nobody here today.', 'households' );
+
+            if ( $hh['unknown'] ) {
+                echo ' ' . esc_html( sprintf(
+                    /* translators: %s: a list of names. */
+                    __( '%s could be anywhere today.', 'households' ),
+                    implode( ', ', wp_list_pluck( $hh['unknown'], 'name' ) )
+                ) );
+            }
+            ?>
+        </p>
+        <?php View::notice(); ?>
+
+        <?php if ( $hh['viewer']['viewing_as'] ) : ?>
+            <section>
+                <strong>
+                    <?php
+                    /* translators: %s: a name. */
+                    echo esc_html( sprintf( __( 'You are looking at this home as %s sees it.', 'households' ), $hh['subject']['name'] ) );
+                    ?>
+                </strong>
+            </section>
+        <?php endif; ?>
 
         <section>
             <h2><?php echo esc_html__( 'To do', 'households' ); ?></h2>
-            <ul class="plain" data-tasks></ul>
-            <form class="grid" data-add-task hidden style="margin-top:12px">
-                <label class="wide"><?php echo esc_html__( 'What needs doing', 'households' ); ?>
-                    <input type="text" name="title" required>
-                </label>
-                <label><?php echo esc_html__( 'For whom', 'households' ); ?>
-                    <select name="person_id"><option value="0"><?php echo esc_html__( 'Everyone', 'households' ); ?></option></select>
-                </label>
-                <label><?php echo esc_html__( 'Kind', 'households' ); ?>
-                    <select name="task_type">
-                        <option value="task"><?php echo esc_html__( 'Task', 'households' ); ?></option>
-                        <option value="appointment"><?php echo esc_html__( 'Appointment', 'households' ); ?></option>
-                    </select>
-                </label>
-                <label><?php echo esc_html__( 'When', 'households' ); ?>
-                    <input type="date" name="due_date">
-                </label>
-                <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-            </form>
+            <ul class="plain">
+                <?php if ( ! $hh['tasks'] ) : ?>
+                    <li class="empty"><?php echo esc_html__( 'Nothing to do.', 'households' ); ?></li>
+                <?php endif; ?>
+                <?php foreach ( $hh['tasks'] as $hh_task ) : ?>
+                    <?php
+                    $hh_bits = [ $hh_task['person'] ? $hh_task['person'] : __( 'Everyone', 'households' ) ];
+                    if ( $hh_task['due_date'] ) {
+                        $hh_bits[] = View::date( $hh_task['due_date'] );
+                    }
+                    if ( 'appointment' === $hh_task['task_type'] ) {
+                        $hh_bits[] = __( 'Appointment', 'households' );
+                    }
+                    ?>
+                    <li class="row">
+                        <form method="post" class="actions grow">
+                            <?php View::fields( 'toggle_task', [ 'task_id' => $hh_task['id'] ] ); ?>
+                            <button type="submit" class="quiet">
+                                <?php echo $hh_task['is_done'] ? esc_html__( 'Undo', 'households' ) : esc_html__( 'Done', 'households' ); ?>
+                            </button>
+                            <span class="<?php echo $hh_task['is_done'] ? 'done' : ''; ?>">
+                                <?php echo esc_html( $hh_task['title'] ); ?>
+                                <span class="meta">· <?php echo esc_html( implode( ' · ', $hh_bits ) ); ?></span>
+                            </span>
+                        </form>
+                        <?php if ( $hh_writing ) : ?>
+                            <form method="post">
+                                <?php View::fields( 'remove_task', [ 'task_id' => $hh_task['id'] ] ); ?>
+                                <button type="submit" class="quiet"><?php echo esc_html__( 'Remove', 'households' ); ?></button>
+                            </form>
+                        <?php endif; ?>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+
+            <?php if ( $hh_writing ) : ?>
+                <form method="post" class="grid" style="margin-top:12px">
+                    <?php View::fields( 'add_task' ); ?>
+                    <label class="wide"><?php echo esc_html__( 'What needs doing', 'households' ); ?>
+                        <input type="text" name="title" required>
+                    </label>
+                    <label><?php echo esc_html__( 'For whom', 'households' ); ?>
+                        <select name="person_id">
+                            <option value="0"><?php echo esc_html__( 'Everyone', 'households' ); ?></option>
+                            <?php foreach ( $hh['people'] as $hh_person ) : ?>
+                                <option value="<?php echo (int) $hh_person['id']; ?>"><?php echo esc_html( $hh_person['name'] ); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                    <label><?php echo esc_html__( 'Kind', 'households' ); ?>
+                        <select name="task_type">
+                            <option value="task"><?php echo esc_html__( 'Task', 'households' ); ?></option>
+                            <option value="appointment"><?php echo esc_html__( 'Appointment', 'households' ); ?></option>
+                        </select>
+                    </label>
+                    <label><?php echo esc_html__( 'When', 'households' ); ?>
+                        <input type="date" name="due_date">
+                    </label>
+                    <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
+                </form>
+            <?php endif; ?>
         </section>
 
         <section>
             <h2><?php echo esc_html__( 'About this home', 'households' ); ?></h2>
             <p class="meta"><?php echo esc_html__( 'What the house needs you to know: the wifi, where the water main valve is, which day the bins go out.', 'households' ); ?></p>
-            <ul class="plain" data-facts></ul>
-            <form class="grid" data-add-note="fact" hidden style="margin-top:12px">
-                <label><?php echo esc_html__( 'Label', 'households' ); ?><input type="text" name="title" required></label>
-                <label class="wide"><?php echo esc_html__( 'Detail', 'households' ); ?><input type="text" name="detail"></label>
-                <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-            </form>
+            <ul class="plain">
+                <?php if ( ! $hh['facts'] ) : ?>
+                    <li class="empty"><?php echo esc_html__( 'Nothing written down yet.', 'households' ); ?></li>
+                <?php endif; ?>
+                <?php foreach ( $hh['facts'] as $hh_note ) : ?>
+                    <li class="row">
+                        <div class="grow">
+                            <strong><?php echo esc_html( $hh_note['title'] ); ?></strong>
+                            <div class="meta"><?php echo esc_html( $hh_note['detail'] ); ?></div>
+                        </div>
+                        <?php if ( $hh_writing ) : ?>
+                            <form method="post">
+                                <?php View::fields( 'remove_note', [ 'kind' => 'fact', 'note_id' => $hh_note['id'] ] ); ?>
+                                <button type="submit" class="quiet"><?php echo esc_html__( 'Remove', 'households' ); ?></button>
+                            </form>
+                        <?php endif; ?>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+
+            <?php if ( $hh_writing ) : ?>
+                <form method="post" class="grid" style="margin-top:12px">
+                    <?php View::fields( 'add_note', [ 'kind' => 'fact' ] ); ?>
+                    <label><?php echo esc_html__( 'Label', 'households' ); ?><input type="text" name="title" required></label>
+                    <label class="wide"><?php echo esc_html__( 'Detail', 'households' ); ?><input type="text" name="detail"></label>
+                    <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
+                </form>
+            <?php endif; ?>
         </section>
 
         <section>
             <h2><?php echo esc_html__( 'Things kept here', 'households' ); ?></h2>
-            <ul class="plain" data-items></ul>
-            <form class="grid" data-add-note="item" hidden style="margin-top:12px">
-                <label><?php echo esc_html__( 'Thing', 'households' ); ?><input type="text" name="title" required></label>
-                <label class="wide"><?php echo esc_html__( 'Where it lives', 'households' ); ?><input type="text" name="detail"></label>
-                <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-            </form>
+            <ul class="plain">
+                <?php if ( ! $hh['items'] ) : ?>
+                    <li class="empty"><?php echo esc_html__( 'Nothing listed yet.', 'households' ); ?></li>
+                <?php endif; ?>
+                <?php foreach ( $hh['items'] as $hh_note ) : ?>
+                    <li class="row">
+                        <div class="grow">
+                            <strong><?php echo esc_html( $hh_note['title'] ); ?></strong>
+                            <div class="meta"><?php echo esc_html( $hh_note['detail'] ); ?></div>
+                        </div>
+                        <?php if ( $hh_writing ) : ?>
+                            <?php // A thing is somewhere rather than nowhere: it moves to another home instead of being taken off the list. ?>
+                            <form method="post" class="actions">
+                                <?php View::fields( 'move_note', [ 'kind' => 'item', 'note_id' => $hh_note['id'] ] ); ?>
+                                <?php foreach ( $hh['homes'] as $hh_other ) : ?>
+                                    <?php if ( $hh_other['id'] !== $hh['home']['id'] ) : ?>
+                                        <button type="submit" class="quiet" name="target_home_id" value="<?php echo (int) $hh_other['id']; ?>">
+                                            <?php
+                                            /* translators: %s: the name of a home. */
+                                            echo esc_html( sprintf( __( 'Move to %s', 'households' ), $hh_other['name'] ) );
+                                            ?>
+                                        </button>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                            </form>
+                        <?php endif; ?>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+
+            <?php if ( $hh_writing ) : ?>
+                <form method="post" class="grid" style="margin-top:12px">
+                    <?php View::fields( 'add_note', [ 'kind' => 'item' ] ); ?>
+                    <label><?php echo esc_html__( 'Thing', 'households' ); ?><input type="text" name="title" required></label>
+                    <label class="wide"><?php echo esc_html__( 'Where it lives', 'households' ); ?><input type="text" name="detail"></label>
+                    <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
+                </form>
+            <?php endif; ?>
         </section>
 
-        <section data-birthdays-section hidden>
-            <h2><?php echo esc_html__( 'Birthdays coming up', 'households' ); ?></h2>
-            <ul class="plain" data-birthdays></ul>
-        </section>
-    <script>
-        (function() {
-            const viewAs = <?php echo (int) $hh_view_as; ?>;
-            const t = {
-                here: '<?php echo esc_js( __( 'Here today:', 'households' ) ); ?>',
-                nobody: '<?php echo esc_js( __( 'Nobody here today.', 'households' ) ); ?>',
-                noTasks: '<?php echo esc_js( __( 'Nothing to do.', 'households' ) ); ?>',
-                noFacts: '<?php echo esc_js( __( 'Nothing written down yet.', 'households' ) ); ?>',
-                noItems: '<?php echo esc_js( __( 'Nothing listed yet.', 'households' ) ); ?>',
-                everyone: '<?php echo esc_js( __( 'Everyone', 'households' ) ); ?>',
-                remove: '<?php echo esc_js( __( 'Remove', 'households' ) ); ?>',
-                moveTo: '<?php echo esc_js( __( 'Move to %s', 'households' ) ); ?>',
-                notTracked: '<?php echo esc_js( __( '%s could be anywhere today.', 'households' ) ); ?>',
-                appointment: '<?php echo esc_js( __( 'Appointment', 'households' ) ); ?>',
-                viewingAs: '<?php echo esc_js( __( 'You are looking at this home as %s sees it.', 'households' ) ); ?>',
-                turning: '<?php echo esc_js( __( '%1$s turns %2$d in %3$d days', 'households' ) ); ?>',
-            };
-
-            const nodes = {
-                name: document.querySelector('[data-home-name]'),
-                here: document.querySelector('[data-here]'),
-                tasks: document.querySelector('[data-tasks]'),
-                facts: document.querySelector('[data-facts]'),
-                items: document.querySelector('[data-items]'),
-                birthdays: document.querySelector('[data-birthdays]'),
-                birthdaysSection: document.querySelector('[data-birthdays-section]'),
-                viewingAs: document.querySelector('[data-viewing-as]'),
-                viewingAsText: document.querySelector('[data-viewing-as-text]'),
-                addTask: document.querySelector('[data-add-task]'),
-            };
-
-            function send(action, fields) {
-                hh.say('');
-                return hh.post(action, Object.assign({ view_as: viewAs || '' }, fields))
-                    .then(render)
-                    .catch((error) => hh.say(error.message, true));
-            }
-
-            function renderTasks(data) {
-                nodes.tasks.innerHTML = '';
-                if (!data.tasks.length) {
-                    nodes.tasks.appendChild(hh.el('li', { class: 'empty', text: t.noTasks }));
-                    return;
-                }
-                data.tasks.forEach((task) => {
-                    const box = hh.el('input', { type: 'checkbox', style: 'width:auto;min-height:0' });
-                    box.checked = task.is_done;
-                    box.addEventListener('change', () => send('toggle_task', { task_id: task.id }));
-                    const bits = [task.person ? task.person : t.everyone];
-                    if (task.due_date) { bits.push(task.due_date); }
-                    if (task.task_type === 'appointment') { bits.push(t.appointment); }
-                    const right = [];
-                    if (data.viewer.can_organise) {
-                        right.push(hh.el('button', {
-                            class: 'quiet', type: 'button', text: t.remove,
-                            onclick: () => send('remove_task', { task_id: task.id }),
-                        }));
-                    }
-                    nodes.tasks.appendChild(hh.el('li', { class: 'row' }, [
-                        hh.el('label', { class: 'inline' }, [
-                            box,
-                            hh.el('span', { class: task.is_done ? 'done' : '' }, [
-                                hh.el('span', { text: task.title }),
-                                hh.el('span', { class: 'meta', text: ' · ' + bits.join(' · ') }),
-                            ]),
-                        ]),
-                        hh.el('div', {}, right),
-                    ]));
-                });
-            }
-
-            function renderNotes(target, notes, kind, empty, data) {
-                const canOrganise = data.viewer.can_organise;
-                target.innerHTML = '';
-                if (!notes.length) {
-                    target.appendChild(hh.el('li', { class: 'empty', text: empty }));
-                    return;
-                }
-                notes.forEach((note) => {
-                    const right = [];
-                    // A thing is somewhere rather than nowhere: it moves to
-                    // another home instead of being taken off the list.
-                    if (canOrganise && kind === 'item') {
-                        data.homes.filter((home) => home.id !== data.home.id).forEach((home) => {
-                            right.push(hh.el('button', {
-                                class: 'quiet', type: 'button', text: t.moveTo.replace('%s', home.name),
-                                onclick: () => send('move_note', { kind: kind, note_id: note.id, target_home_id: home.id }),
-                            }));
-                        });
-                    } else if (canOrganise) {
-                        right.push(hh.el('button', {
-                            class: 'quiet', type: 'button', text: t.remove,
-                            onclick: () => send('remove_note', { kind: kind, note_id: note.id }),
-                        }));
-                    }
-                    target.appendChild(hh.el('li', { class: 'row' }, [
-                        hh.el('div', {}, [
-                            hh.el('strong', { text: note.title }),
-                            hh.el('div', { class: 'meta', text: note.detail }),
-                        ]),
-                        hh.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, right),
-                    ]));
-                });
-            }
-
-            function render(data) {
-                nodes.name.textContent = data.home.name;
-                const names = data.here.map((p) => p.name);
-                const lines = [names.length ? t.here + ' ' + names.join(', ') : t.nobody];
-                if (data.unknown && data.unknown.length) {
-                    lines.push(t.notTracked.replace('%s', data.unknown.map((p) => p.name).join(', ')));
-                }
-                nodes.here.textContent = lines.join(' ');
-
-                nodes.viewingAs.hidden = !data.viewer.viewing_as;
-                if (data.viewer.viewing_as) {
-                    nodes.viewingAsText.textContent = t.viewingAs.replace('%s', data.subject.name);
-                }
-
-                renderTasks(data);
-                renderNotes(nodes.facts, data.facts, 'fact', t.noFacts, data);
-                renderNotes(nodes.items, data.items, 'item', t.noItems, data);
-
-                nodes.birthdaysSection.hidden = !data.birthdays.length;
-                nodes.birthdays.innerHTML = '';
-                data.birthdays.slice(0, 5).forEach((birthday) => {
-                    nodes.birthdays.appendChild(hh.el('li', {
-                        text: t.turning.replace('%1$s', birthday.name).replace('%2$d', birthday.turning).replace('%3$d', birthday.days_until),
-                    }));
-                });
-
-                document.querySelectorAll('[data-add-task], [data-add-note]').forEach((form) => {
-                    form.hidden = !data.viewer.can_organise || data.viewer.viewing_as;
-                });
-                const select = nodes.addTask.querySelector('[name="person_id"]');
-                select.innerHTML = '';
-                select.appendChild(hh.el('option', { value: '0', text: t.everyone }));
-                data.people.forEach((person) => select.appendChild(hh.el('option', { value: person.id, text: person.name })));
-
-                hh.say('');
-            }
-
-            nodes.addTask.addEventListener('submit', (event) => {
-                event.preventDefault();
-                const form = event.target;
-                send('add_task', {
-                    title: form.title.value,
-                    person_id: form.person_id.value,
-                    task_type: form.task_type.value,
-                    due_date: form.due_date.value,
-                }).then(() => form.reset());
-            });
-
-            document.querySelectorAll('[data-add-note]').forEach((form) => {
-                form.addEventListener('submit', (event) => {
-                    event.preventDefault();
-                    send('add_note', {
-                        kind: form.getAttribute('data-add-note'),
-                        title: form.title.value,
-                        detail: form.detail.value,
-                    }).then(() => form.reset());
-                });
-            });
-
-            send('get', {});
-        })();
-    </script>
+        <?php if ( $hh['birthdays'] ) : ?>
+            <section>
+                <h2><?php echo esc_html__( 'Birthdays coming up', 'households' ); ?></h2>
+                <ul class="plain">
+                    <?php foreach ( array_slice( $hh['birthdays'], 0, 5 ) as $hh_birthday ) : ?>
+                        <li>
+                            <?php
+                            printf(
+                                esc_html(
+                                    /* translators: 1: a name, 2: an age, 3: a number of days. */
+                                    __( '%1$s turns %2$d in %3$d days', 'households' )
+                                ),
+                                esc_html( $hh_birthday['name'] ),
+                                (int) $hh_birthday['turning'],
+                                (int) $hh_birthday['days_until']
+                            );
+                            ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            </section>
+        <?php endif; ?>
 <?php require __DIR__ . '/_foot.php'; ?>

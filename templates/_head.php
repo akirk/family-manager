@@ -1,10 +1,9 @@
 <?php
 /**
- * The chrome every page shares: styles, the app's config, and a small helper
- * for talking to the one AJAX endpoint. Pages set $hh_home_id before
- * including this, when the page is about one home.
+ * The chrome every page shares: the styles, and nothing else. The pages are
+ * ordinary PHP — they read through Storage and post their changes back to
+ * their own URL — so there is no client to configure here.
  */
-$hh_home_id = $hh_home_id ?? 0;
 ?>
 <!DOCTYPE html>
 <html <?php wp_app_language_attributes(); ?>>
@@ -66,75 +65,13 @@ $hh_home_id = $hh_home_id ?? 0;
         form.grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); align-items: end; }
         form.grid .wide { grid-column: 1 / -1; }
         .done { text-decoration: line-through; color: var(--hh-muted); }
+        form.inline { display: inline; }
+        .actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+        .grow { flex: 1 1 240px; }
+        p.status { margin: 0 0 12px; }
         [hidden] { display: none !important; }
     </style>
 </head>
 <body>
     <?php wp_app_body_open(); ?>
-    <script>
-        window.households = <?php echo wp_json_encode( [
-            'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-            'nonce'   => wp_create_nonce( 'households_app' ),
-            'baseUrl' => home_url( '/households/' ),
-            'homeId'  => (int) ( $hh_home_id ?? 0 ),
-        ] ); ?>;
-    </script>
-    <script>
-        /**
-         * One endpoint, one helper. `post` sends an app action and resolves
-         * with the payload; every page reports failures the same way.
-         */
-        window.hh = (function() {
-            const cfg = window.households;
-            const statusEl = () => document.querySelector('[data-status]');
-
-            function say(message, isError) {
-                const el = statusEl();
-                if (!el) { return; }
-                el.textContent = message || '';
-                if (isError) { el.setAttribute('data-error', '1'); } else { el.removeAttribute('data-error'); }
-            }
-
-            function post(action, fields) {
-                const body = new FormData();
-                body.append('action', 'households_dashboard');
-                body.append('nonce', cfg.nonce);
-                body.append('household_action', action);
-                if (cfg.homeId) { body.append('home_id', cfg.homeId); }
-                Object.entries(fields || {}).forEach(([key, value]) => {
-                    if (Array.isArray(value)) {
-                        value.forEach((entry) => body.append(key + '[]', entry));
-                    } else if (value !== undefined && value !== null) {
-                        body.append(key, value);
-                    }
-                });
-                return fetch(cfg.ajaxUrl, { method: 'POST', credentials: 'same-origin', body })
-                    .then((response) => response.json())
-                    .then((result) => {
-                        if (!result.success) {
-                            throw new Error(result.data && result.data.message ? result.data.message : 'Request failed');
-                        }
-                        return result.data;
-                    });
-            }
-
-            function el(tag, props, children) {
-                const node = document.createElement(tag);
-                Object.entries(props || {}).forEach(([key, value]) => {
-                    if (key === 'text') { node.textContent = value; }
-                    else if (key === 'html') { node.innerHTML = value; }
-                    else if (key === 'onclick') { node.addEventListener('click', value); }
-                    else if (value === true) { node.setAttribute(key, ''); }
-                    else if (value !== false && value !== null && value !== undefined) { node.setAttribute(key, value); }
-                });
-                (children || []).forEach((child) => child && node.appendChild(child));
-                return node;
-            }
-
-            function homeUrl(id, suffix) { return cfg.baseUrl + id + '/' + (suffix || ''); }
-            function personUrl(id) { return cfg.baseUrl + 'person/' + id + '/'; }
-
-            return { cfg, post, el, say, homeUrl, personUrl };
-        })();
-    </script>
     <main id="app">

@@ -32,7 +32,10 @@ class App extends BaseApp {
         add_action( 'init', [ $this, 'register_post_types' ] );
         add_action( 'template_redirect', [ $this, 'route_by_home' ] );
         add_filter( 'login_redirect', [ $this, 'redirect_members_to_app' ], 10, 3 );
-        add_action( 'wp_ajax_households_dashboard', [ $this, 'handle_dashboard_request' ] );
+        // Forms post back to the page they were made on, and are handled
+        // before it renders. `route_by_home` has turned away anyone who does
+        // not belong here by the time this runs.
+        add_action( 'template_redirect', [ $this, 'handle_post' ], 11 );
     }
 
     protected function get_url_path(): string {
@@ -182,6 +185,9 @@ class App extends BaseApp {
             exit;
         }
 
+        // Being on a home's page is what "the last home you looked at" means.
+        $this->storage->remember_home( $user_id, $home_id );
+
         // Managing a home, and looking at it as someone else, are both things
         // only its administrators do. Turning them away here means the page
         // never renders controls that every action would refuse anyway.
@@ -264,15 +270,69 @@ class App extends BaseApp {
         }
     }
 
-    public function handle_dashboard_request(): void {
-        if ( ! is_user_logged_in() ) {
-            wp_send_json_error( [ 'message' => __( 'Please log in to open your home.', 'households' ) ], 401 );
+    /**
+     * Every change is a form posting back to the page it was made on.
+     *
+     * This runs before anything is rendered: it checks the nonce, does the
+     * work, and redirects to the same URL, so a refresh repeats nothing and
+     * the page that comes back is simply read afresh. What went wrong, if
+     * anything did, is named in the URL and said by the page.
+     */
+    public function handle_post(): void {
+        if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) ? $_SERVER['REQUEST_METHOD'] : '' ) ) {
+            return;
         }
-        check_ajax_referer( 'households_app', 'nonce' );
+        if ( ! is_user_logged_in() || null === $this->app_request_path() ) {
+            return;
+        }
 
+        $action = isset( $_POST['household_action'] ) ? sanitize_key( wp_unslash( $_POST['household_action'] ) ) : '';
+        if ( '' === $action ) {
+            return;
+        }
+
+        $nonce = isset( $_POST['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ) : '';
+        if ( ! wp_verify_nonce( $nonce, 'households_' . $action ) ) {
+            $this->go_back( 'expired' );
+        }
+
+        $outcome = $this->perform( $action );
+        $this->go_back( $outcome['problem'], $outcome['to'] );
+    }
+
+    /** Back where the form was, with anything that went wrong named in the URL. */
+    private function go_back( string $problem = '', string $to = '' ): void {
+        if ( '' === $to ) {
+            $here = isset( $_SERVER['REQUEST_URI'] ) ? esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '/';
+            $to = remove_query_arg( 'problem', $here );
+        }
+        if ( '' !== $problem ) {
+            $to = add_query_arg( 'problem', $problem, $to );
+        }
+        wp_safe_redirect( $to );
+        exit;
+    }
+
+    private function refuse( string $problem = 'not-allowed' ): array {
+        return [ 'problem' => $problem, 'to' => '' ];
+    }
+
+    private function done( string $to = '' ): array {
+        return [ 'problem' => '', 'to' => $to ];
+    }
+
+    /**
+     * Do what the form asked, and say where the answer lives.
+     *
+     * The order is the order the questions have to be asked in: the verbs that
+     * span every home, or run before you belong to one, are answered first;
+     * everything else needs a home before it can be allowed or refused.
+     *
+     * @return array{problem:string,to:string}
+     */
+    private function perform( string $action ): array {
         $user_id = get_current_user_id();
         $viewer_person = Access::person_for_user( $user_id );
-        $action = isset( $_POST['household_action'] ) ? sanitize_key( wp_unslash( $_POST['household_action'] ) ) : 'get';
 
         $post = static function( string $key, string $filter = 'text' ) {
             if ( ! isset( $_POST[ $key ] ) ) {
@@ -293,118 +353,100 @@ class App extends BaseApp {
             }
         };
 
-        // The index is about the viewer, so it is answered before any home is
-        // resolved: it spans all of them, and belonging to none is an answer.
-        if ( 'get_my_day' === $action ) {
-            wp_send_json_success( $this->storage->get_my_day( $user_id ) );
-        }
-
-        // The homes page spans homes and is the one place that answers before
-        // you belong to any: it is where the first one is started.
-        if ( 'get_homes' === $action || 'start_home' === $action ) {
-            $started = 'start_home' === $action ? $this->storage->start_home( $user_id, $post( 'name' ) ) : 0;
-            wp_send_json_success( [
-                'homes'   => $this->storage->get_homes_overview( $user_id ),
-                'started' => $started,
-            ] );
+        if ( 'start_home' === $action ) {
+            $started = $this->storage->start_home( $user_id, $post( 'name' ) );
+            if ( ! $started ) {
+                return $this->refuse( 'no-name' );
+            }
+            // A home you have just started is a home with one person in it, so
+            // the next thing anyone does is add the rest.
+            return $this->done( home_url( '/' . $this->get_url_path() . '/' . $started . '/manage/' ) );
         }
 
         // Saying where you are is something anyone may do about themselves,
         // child or not: it is a statement about your own day rather than a
-        // change to anybody's arrangement. Saying it about someone else is
-        // organising, and stays where it was.
+        // change to anybody's arrangement.
         if ( 'say_where' === $action ) {
             $said_home = $post( 'said_home_id', 'int' );
-            $this->assert_allowed( $viewer_person && ( ! $said_home || Access::is_member( $viewer_person, $said_home ) ) );
+            if ( ! $viewer_person || ( $said_home && ! Access::is_member( $viewer_person, $said_home ) ) ) {
+                return $this->refuse();
+            }
             Whereabouts::set_override( $viewer_person, $post( 'date' ) ?: current_time( 'Y-m-d' ), $said_home );
             Whereabouts::prune_overrides( $viewer_person );
-            wp_send_json_success( $this->storage->get_my_day( $user_id ) );
+            return $this->done();
         }
 
-        if ( 'get_things' === $action ) {
-            wp_send_json_success( [
-                'things' => $this->storage->get_things_overview( $user_id ),
-                'homes'  => $this->storage->get_homes_for_person( $viewer_person ),
-            ] );
-        }
-
-        // The person page addresses someone directly rather than through a home.
-        if ( 'get_person' === $action || 'save_person' === $action ) {
+        // A person is addressed directly rather than through a home.
+        if ( 'save_person' === $action ) {
             $person_id = $post( 'person_id', 'int' ) ?: $viewer_person;
-            $this->assert_allowed( Access::can_view_person( $user_id, $person_id ) );
-            if ( 'save_person' === $action ) {
-                $this->storage->save_person( $person_id, [
-                    'about'     => $post( 'about', 'raw' ),
-                    'birthdate' => $post( 'birthdate' ),
-                ] );
+            if ( ! Access::can_view_person( $user_id, $person_id ) ) {
+                return $this->refuse();
             }
-            wp_send_json_success( [ 'person' => $this->storage->get_person( $person_id ) ] );
+            $this->storage->save_person( $person_id, [
+                'about'     => $post( 'about', 'raw' ),
+                'birthdate' => $post( 'birthdate' ),
+            ] );
+            return $this->done();
         }
 
-        // The home is named by the page asking. A request that names one the
-        // viewer does not belong to is refused rather than quietly answered
-        // about a different home; only a request that names none at all — the
-        // views that span homes — falls back to the last one visited.
-        if ( $post( 'home_id', 'int' ) ) {
-            $home_id = $post( 'home_id', 'int' );
-            $this->assert_allowed( Access::is_member( $viewer_person, $home_id ) );
+        // Everything else happens in a home. A form that names one must name a
+        // home the viewer belongs to — a form naming another is refused rather
+        // than quietly answered about a different home. A form that names none
+        // is on a page that is about one, or falls back to the last one seen.
+        $home_id = $post( 'home_id', 'int' );
+        if ( $home_id ) {
+            if ( ! Access::is_member( $viewer_person, $home_id ) ) {
+                return $this->refuse();
+            }
         } else {
-            $home_id = $this->storage->last_home_id( $user_id );
+            $home_id = (int) get_query_var( 'id' );
+            if ( ! $home_id || ! Access::is_member( $viewer_person, $home_id ) ) {
+                $home_id = $this->storage->last_home_id( $user_id );
+            }
         }
         if ( ! $home_id ) {
-            wp_send_json_error( [ 'message' => __( 'You do not belong to a home yet.', 'households' ) ], 404 );
-        }
-        $this->storage->remember_home( $user_id, $home_id );
-
-        $subject_id = $post( 'view_as', 'int' ) ?: $viewer_person;
-        if ( $subject_id !== $viewer_person ) {
-            $this->assert_allowed( Access::can_view_person( $user_id, $subject_id ) );
+            return $this->refuse( 'no-home' );
         }
 
         $can_manage = current_user_can( 'manage_household', $home_id );
         $can_organise = current_user_can( 'organise_household', $home_id );
 
-        // Whereabouts answers with the board rather than the dashboard.
-        if ( in_array( $action, [ 'get_whereabouts', 'save_rotation', 'clear_rotation', 'set_override' ], true ) ) {
-            if ( 'get_whereabouts' !== $action ) {
-                $this->assert_allowed( $can_organise );
-                $person_id = $post( 'person_id', 'int' );
-                $this->assert_allowed( $person_id && Access::is_member( $person_id, $home_id ) );
-
-                if ( 'save_rotation' === $action ) {
-                    $homes = array_map( 'absint', (array) ( isset( $_POST['homes'] ) ? wp_unslash( $_POST['homes'] ) : [] ) );
-                    $cycle = array_map( 'absint', (array) ( isset( $_POST['cycle'] ) ? wp_unslash( $_POST['cycle'] ) : [] ) );
-                    Whereabouts::save_rotation( $person_id, [
-                        'pattern'         => $post( 'pattern', 'key' ),
-                        'start_date'      => $post( 'start_date' ),
-                        'homes'           => $homes,
-                        'changeover_time' => $post( 'changeover_time' ),
-                        'cycle'           => $cycle,
-                    ] );
-                } elseif ( 'clear_rotation' === $action ) {
-                    Whereabouts::clear_rotation( $person_id );
-                } else {
-                    Whereabouts::set_override( $person_id, $post( 'date' ), $post( 'override_home_id', 'int' ) );
-                    Whereabouts::prune_overrides( $person_id );
-                }
+        if ( in_array( $action, [ 'save_rotation', 'clear_rotation', 'set_override' ], true ) ) {
+            $person_id = $post( 'person_id', 'int' );
+            if ( ! $can_organise || ! $person_id || ! Access::is_member( $person_id, $home_id ) ) {
+                return $this->refuse();
             }
-
-            wp_send_json_success( [
-                'board'       => $this->storage->get_whereabouts_board( $home_id, $post( 'start' ), $post( 'window', 'int' ) ?: 14 ),
-                'everyone'    => $this->storage->get_people_overview( $user_id ),
-                'homes'       => $this->storage->get_homes_for_person( $viewer_person ),
-                'permissions' => [ 'organise' => $can_organise, 'manage' => $can_manage ],
-            ] );
+            if ( 'save_rotation' === $action ) {
+                $homes = array_map( 'absint', (array) ( isset( $_POST['homes'] ) ? wp_unslash( $_POST['homes'] ) : [] ) );
+                $cycle = array_map( 'absint', (array) ( isset( $_POST['cycle'] ) ? wp_unslash( $_POST['cycle'] ) : [] ) );
+                Whereabouts::save_rotation( $person_id, [
+                    'pattern'         => $post( 'pattern', 'key' ),
+                    'start_date'      => $post( 'start_date' ),
+                    'homes'           => $homes,
+                    'changeover_time' => $post( 'changeover_time' ),
+                    'cycle'           => $cycle,
+                ] );
+            } elseif ( 'clear_rotation' === $action ) {
+                Whereabouts::clear_rotation( $person_id );
+            } else {
+                Whereabouts::set_override( $person_id, $post( 'date' ), $post( 'override_home_id', 'int' ) );
+                Whereabouts::prune_overrides( $person_id );
+            }
+            return $this->done();
         }
 
         switch ( $action ) {
             case 'update_home':
-                $this->assert_allowed( $can_manage );
+                if ( ! $can_manage ) {
+                    return $this->refuse();
+                }
                 $this->storage->update_home( $home_id, $post( 'name' ) );
                 break;
 
             case 'add_person':
-                $this->assert_allowed( $can_manage );
+                if ( ! $can_manage ) {
+                    return $this->refuse();
+                }
                 $this->storage->add_person( $home_id, $post( 'name' ), [
                     'email'     => $post( 'email', 'email' ),
                     'password'  => $post( 'password', 'raw' ),
@@ -415,7 +457,9 @@ class App extends BaseApp {
                 break;
 
             case 'update_person':
-                $this->assert_allowed( $can_manage );
+                if ( ! $can_manage ) {
+                    return $this->refuse();
+                }
                 $person_id = $post( 'person_id', 'int' );
                 if ( Access::is_member( $person_id, $home_id ) ) {
                     $this->storage->save_person( $person_id, [
@@ -426,7 +470,9 @@ class App extends BaseApp {
                 break;
 
             case 'remove_person':
-                $this->assert_allowed( $can_manage );
+                if ( ! $can_manage ) {
+                    return $this->refuse();
+                }
                 $person_id = $post( 'person_id', 'int' );
                 // The record survives leaving; only the membership goes.
                 if ( $person_id && $person_id !== $viewer_person && Access::is_member( $person_id, $home_id ) ) {
@@ -435,7 +481,9 @@ class App extends BaseApp {
                 break;
 
             case 'set_admin':
-                $this->assert_allowed( $can_manage );
+                if ( ! $can_manage ) {
+                    return $this->refuse();
+                }
                 $person_id = $post( 'person_id', 'int' );
                 $target_user = Access::user_for_person( $person_id );
                 // An administrator may not drop themselves and leave the home
@@ -446,61 +494,82 @@ class App extends BaseApp {
                 break;
 
             case 'add_task':
-                $this->assert_allowed( $can_organise );
+                if ( ! $can_organise ) {
+                    return $this->refuse();
+                }
                 $this->storage->add_task( $home_id, $post( 'title' ), $post( 'person_id', 'int' ), $post( 'task_type', 'key' ) ?: 'task', $post( 'due_date' ) );
                 break;
 
             case 'toggle_task':
                 $task_id = $post( 'task_id', 'int' );
-                // Anyone may tick what they can see; the dashboard is what they
-                // can see, so that is what is checked against.
+                // Anyone may tick what they can see; the page they are on is
+                // what they can see, so that is what it is checked against.
+                $subject_id = self::subject_for_page( $user_id );
                 $visible = array_column( $this->storage->get_dashboard( $user_id, $home_id, $subject_id )['tasks'] ?? [], 'id' );
-                if ( $task_id && ( $can_organise || in_array( $task_id, $visible, true ) ) ) {
-                    $this->storage->toggle_task( $home_id, $task_id );
+                if ( ! $task_id || ! ( $can_organise || in_array( $task_id, $visible, true ) ) ) {
+                    return $this->refuse();
                 }
+                $this->storage->toggle_task( $home_id, $task_id );
                 break;
 
             case 'remove_task':
-                $this->assert_allowed( $can_organise );
+                if ( ! $can_organise ) {
+                    return $this->refuse();
+                }
                 $this->storage->remove_task( $home_id, $post( 'task_id', 'int' ) );
                 break;
 
             case 'add_note':
-                $this->assert_allowed( $can_organise );
+                if ( ! $can_organise ) {
+                    return $this->refuse();
+                }
                 $this->storage->add_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'title' ), $post( 'detail', 'raw' ) );
                 break;
 
             case 'update_note':
-                $this->assert_allowed( $can_organise );
+                if ( ! $can_organise ) {
+                    return $this->refuse();
+                }
                 $this->storage->update_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'note_id', 'int' ), $post( 'title' ), $post( 'detail', 'raw' ) );
                 break;
 
             case 'move_note':
-                $this->assert_allowed( $can_organise );
                 $target = $post( 'target_home_id', 'int' );
-                $this->assert_allowed( Access::is_member( $viewer_person, $target ) );
+                if ( ! $can_organise || ! Access::is_member( $viewer_person, $target ) ) {
+                    return $this->refuse();
+                }
                 $this->storage->move_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'note_id', 'int' ), $target );
                 break;
 
             case 'remove_note':
-                $this->assert_allowed( $can_organise );
+                if ( ! $can_organise ) {
+                    return $this->refuse();
+                }
                 $this->storage->remove_note( $home_id, $this->note_type( $post( 'kind', 'key' ) ), $post( 'note_id', 'int' ) );
                 break;
         }
 
-        wp_send_json_success( $this->storage->get_dashboard( $user_id, $home_id, $subject_id ) );
+        return $this->done();
     }
 
-    /** Facts and things are the same record; the page says which it is asking about. */
+    /**
+     * Whose view the page is being read as: the person named in the URL, when
+     * the viewer is allowed to see their view, and otherwise the viewer
+     * themselves. Both the page and the forms on it read it the same way.
+     */
+    public static function subject_for_page( int $user_id ): int {
+        $subject = (int) get_query_var( 'person_id' );
+        if ( $subject && Access::can_view_person( $user_id, $subject ) ) {
+            return $subject;
+        }
+        return Access::person_for_user( $user_id );
+    }
+
+    /** Facts and things are the same record; the form says which it is about. */
     private function note_type( string $kind ): string {
         return 'item' === $kind ? Storage::ITEM : Storage::FACT;
     }
 
-    private function assert_allowed( bool $allowed ): void {
-        if ( ! $allowed ) {
-            wp_send_json_error( [ 'message' => __( 'You are not allowed to do that.', 'households' ) ], 403 );
-        }
-    }
 
     public function activate(): void {
         $this->setup_storage();
