@@ -233,7 +233,7 @@ class Storage {
             return 0;
         }
 
-        $person_id = (int) wp_insert_post( [
+        $person_id = $this->write_post( [
             'post_author' => 0,
             'post_status' => 'private',
             'post_title'  => $name,
@@ -304,15 +304,15 @@ class Storage {
             return;
         }
         if ( array_key_exists( 'name', $fields ) && '' !== trim( (string) $fields['name'] ) ) {
-            wp_update_post( [
+            $this->write_post( [
                 'ID'         => $person_id,
                 'post_title' => sanitize_text_field( (string) $fields['name'] ),
             ] );
         }
         if ( array_key_exists( 'about', $fields ) ) {
-            wp_update_post( [
+            $this->write_post( [
                 'ID'           => $person_id,
-                'post_content' => wp_kses_post( (string) $fields['about'] ),
+                'post_content' => sanitize_textarea_field( (string) $fields['about'] ),
             ] );
         }
         if ( array_key_exists( 'label', $fields ) ) {
@@ -419,8 +419,8 @@ class Storage {
             return 0;
         }
         $item = self::ITEM === $post_type;
-        $post_id = (int) wp_insert_post( [
-            'post_content' => $item ? '' : wp_kses_post( $detail ),
+        $post_id = $this->write_post( [
+            'post_content' => $item ? '' : sanitize_textarea_field( $detail ),
             'post_status'  => 'private',
             'post_title'   => $title,
             'post_type'    => $post_type,
@@ -450,13 +450,13 @@ class Storage {
             if ( self::ITEM === $post_type ) {
                 $this->set_where( $post_id, $home_id, $detail );
             } else {
-                $fields['post_content'] = wp_kses_post( $detail );
+                $fields['post_content'] = sanitize_textarea_field( $detail );
             }
         }
         if ( null !== $note ) {
-            $fields['post_excerpt'] = wp_kses_post( $note );
+            $fields['post_excerpt'] = sanitize_textarea_field( $note );
         }
-        wp_update_post( $fields );
+        $this->write_post( $fields );
         return true;
     }
 
@@ -509,7 +509,7 @@ class Storage {
                 $kept[ $was ] = $said;
             }
         }
-        $kept[ $home_id ] = wp_kses_post( $where );
+        $kept[ $home_id ] = sanitize_text_field( $where );
         update_post_meta( $post_id, self::META_WHERE, $kept );
     }
 
@@ -555,7 +555,7 @@ class Storage {
         if ( ! $revision || (int) $revision->post_parent !== $post_id ) {
             return false;
         }
-        wp_update_post( [
+        $this->write_post( [
             'ID'           => $post_id,
             'post_excerpt' => $revision->post_excerpt,
         ] );
@@ -1270,7 +1270,7 @@ class Storage {
         if ( $person_id && ! Access::is_member( $person_id, $home_id ) ) {
             $person_id = 0;
         }
-        $task_id = (int) wp_insert_post( [
+        $task_id = $this->write_post( [
             'post_parent' => $person_id,
             'post_status' => 'private',
             'post_title'  => $title,
@@ -1312,7 +1312,7 @@ class Storage {
         if ( $moved ) {
             wp_set_object_terms( $task_id, [ $moved ], Access::TAXONOMY );
         }
-        wp_update_post( [
+        $this->write_post( [
             'ID'          => $task_id,
             'post_parent' => $person_id,
             'post_title'  => $title,
@@ -1363,6 +1363,44 @@ class Storage {
             return strcmp( $a['due_date'] ?: '9999-12-31', $b['due_date'] ?: '9999-12-31' );
         } );
         return $tasks;
+    }
+
+    /**
+     * Write one of ours, keeping what was typed as it was typed.
+     *
+     * Everything this app stores is plain text: it goes onto the page through
+     * esc_html, so nothing in it is markup, and it is made safe on the way in
+     * by having any tags taken out of it. WordPress guards a post differently
+     * — for anybody without the run of the whole site it turns "&" into
+     * "&amp;" as it is stored — which is right for a post that is HTML and
+     * wrong for a line somebody typed: they wrote an ampersand and want to
+     * read one back, not the name of one. So that guard is held off while ours
+     * does the work, and put back exactly where it was found.
+     *
+     * @return int the post written, or 0.
+     */
+    private function write_post( array $fields ): int {
+        $held = [];
+        $guards = [
+            'content_save_pre'          => 'wp_filter_post_kses',
+            'content_filtered_save_pre' => 'wp_filter_post_kses',
+            'excerpt_save_pre'          => 'wp_filter_post_kses',
+            'title_save_pre'            => 'wp_filter_kses',
+        ];
+        foreach ( $guards as $hook => $guard ) {
+            $at = has_filter( $hook, $guard );
+            if ( false !== $at ) {
+                remove_filter( $hook, $guard, $at );
+                $held[ $hook ] = [ $guard, $at ];
+            }
+        }
+        $written = empty( $fields['ID'] )
+            ? (int) wp_insert_post( $fields )
+            : (int) wp_update_post( $fields );
+        foreach ( $held as $hook => $guard ) {
+            add_filter( $hook, $guard[0], $guard[1] );
+        }
+        return $written;
     }
 
     /**
