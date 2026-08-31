@@ -1,5 +1,5 @@
 <?php require __DIR__ . '/_head.php'; ?>
-        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Your homes', 'households' ); ?></a>
+        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Your day', 'households' ); ?></a>
         <h1><?php echo esc_html__( 'Who is where', 'households' ); ?></h1>
         <p class="subtitle"><?php echo esc_html__( 'Everyone across the homes you belong to, and where they are today.', 'households' ); ?></p>
         <div class="status" data-status><?php echo esc_html__( 'Loading…', 'households' ); ?></div>
@@ -135,9 +135,11 @@
                         const cell = hh.el('td', {
                             title: day ? day.home_name : '',
                             style: 'padding:0;text-align:center;border:1px solid var(--hh-line);'
-                                + 'background:' + (!day ? 'transparent' : (day.is_here ? 'color-mix(in srgb, var(--hh-accent) 22%, transparent)' : 'transparent')) + ';'
+                                + 'background:' + (day && day.is_here ? 'color-mix(in srgb, var(--hh-accent) 22%, transparent)' : 'transparent') + ';'
                                 + (day && day.is_override ? 'outline:2px solid var(--hh-warm);outline-offset:-2px;' : ''),
-                            text: day ? (day.home_name || '').slice(0, 1) : '·',
+                            // A day nothing says anything about still gets a
+                            // cell, so it can be tapped and said.
+                            text: day && day.home_name ? day.home_name.slice(0, 1) : '·',
                         });
                         if (day && state.canOrganise) {
                             cell.style.cursor = 'pointer';

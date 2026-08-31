@@ -2,7 +2,7 @@
 $hh_person_id = (int) get_query_var( 'person_id' );
 require __DIR__ . '/_head.php';
 ?>
-        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Your homes', 'households' ); ?></a>
+        <a class="back" href="<?php echo esc_url( home_url( '/households/' ) ); ?>">&larr; <?php echo esc_html__( 'Your day', 'households' ); ?></a>
         <h1 data-name><?php echo esc_html__( 'A person', 'households' ); ?></h1>
         <p class="subtitle" data-homes></p>
         <div class="status" data-status><?php echo esc_html__( 'Loading…', 'households' ); ?></div>

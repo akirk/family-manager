@@ -15,8 +15,11 @@ namespace Households;
  * The rotation lives on the person, not on any one home, so every home reads
  * the same answer.
  *
- * A single day is moved with an override, which wins over the cycle and leaves
- * the pattern untouched — a swapped weekend should not shift every week after it.
+ * A single day is said outright with an override, which wins over the cycle and
+ * leaves the pattern untouched — a swapped weekend should not shift every week
+ * after it. A day can be said with no pattern behind it at all, which is how
+ * someone who belongs to several homes and rotates between none answers the
+ * question for today without inventing an arrangement they do not have.
  */
 class Whereabouts {
     public const META_ROTATION  = '_households_rotation';
@@ -165,7 +168,7 @@ class Whereabouts {
         return $overrides;
     }
 
-    /** Move a single day, or hand it back to the pattern with a home ID of 0. */
+    /** Say where someone is on a day, or take it back with a home ID of 0. */
     public static function set_override( int $person_id, string $date, int $home_id ): bool {
         $date = self::normalize_date( $date );
         if ( '' === $date ) {
@@ -204,31 +207,49 @@ class Whereabouts {
      */
     public static function home_on( int $person_id, string $date ): array {
         $date = self::normalize_date( $date );
-        $rotation = self::get_rotation( $person_id );
-        if ( '' === $date || ! $rotation ) {
+        if ( '' === $date ) {
             return [ 'home_id' => 0, 'is_override' => false ];
         }
 
+        // What someone said about a day wins, and it stands on its own: a
+        // statement about today needs no pattern behind it to be true.
         $overrides = self::get_overrides( $person_id );
         if ( isset( $overrides[ $date ] ) ) {
             return [ 'home_id' => $overrides[ $date ], 'is_override' => true ];
         }
 
-        return [ 'home_id' => self::home_from_cycle( $rotation, $date ), 'is_override' => false ];
+        $rotation = self::get_rotation( $person_id );
+        return [
+            'home_id'     => $rotation ? self::home_from_cycle( $rotation, $date ) : self::only_home( $person_id ),
+            'is_override' => false,
+        ];
+    }
+
+    /**
+     * The home someone is at when nothing else says otherwise: the only one
+     * they belong to, because there is nowhere else they could be.
+     *
+     * Belonging to several and rotating between none is not an answer, and is
+     * not guessed at — it is asked about instead.
+     */
+    private static function only_home( int $person_id ): int {
+        $homes = Access::home_ids_for_person( $person_id );
+        return 1 === count( $homes ) ? $homes[0] : 0;
     }
 
     /**
      * A person's whereabouts over a run of days.
      *
+     * A day nothing can account for has a home of 0. Not everyone rotates, and
+     * not knowing is an answer worth returning: it is what lets a day be asked
+     * about rather than quietly filled in.
+     *
      * @return array[] one entry per day: date, home_id, is_override.
      */
     public static function days_for_person( int $person_id, string $start, int $days ): array {
         $rotation = self::get_rotation( $person_id );
-        if ( ! $rotation ) {
-            return [];
-        }
-
         $overrides = self::get_overrides( $person_id );
+        $only = $rotation ? 0 : self::only_home( $person_id );
         $cursor = \DateTimeImmutable::createFromFormat( '!Y-m-d', self::normalize_date( $start ) ?: self::today() );
         if ( ! $cursor ) {
             return [];
@@ -236,10 +257,11 @@ class Whereabouts {
         $out = [];
         for ( $i = 0; $i < max( 1, $days ); $i++ ) {
             $date = $cursor->format( 'Y-m-d' );
+            $said = isset( $overrides[ $date ] );
             $out[] = [
                 'date'        => $date,
-                'home_id'     => $overrides[ $date ] ?? self::home_from_cycle( $rotation, $date ),
-                'is_override' => isset( $overrides[ $date ] ),
+                'home_id'     => $said ? $overrides[ $date ] : ( $rotation ? self::home_from_cycle( $rotation, $date ) : $only ),
+                'is_override' => $said,
             ];
             $cursor = $cursor->modify( '+1 day' );
         }
@@ -251,11 +273,12 @@ class Whereabouts {
      * which they are somewhere else.
      *
      * @return array{until:string,next_home_id:int}|array{} Empty when the stay
-     *         runs past the horizon, or the person has no rotation.
+     *         runs past the horizon, or nothing says where they are now.
      */
     public static function stay_ends( int $person_id, string $from, int $horizon = 60 ): array {
         $days = self::days_for_person( $person_id, $from, $horizon );
-        if ( ! $days ) {
+        // Without a first day there is no stay to end.
+        if ( ! $days || ! $days[0]['home_id'] ) {
             return [];
         }
         $current = $days[0]['home_id'];

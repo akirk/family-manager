@@ -67,11 +67,13 @@ class App extends BaseApp {
      * Every home has its own address.
      *
      * The literal routes are registered before `{id}`, and `{id}` only matches
-     * digits, so a home can never shadow `where` or `person`.
+     * digits, so a home can never shadow `homes`, `where` or `person`.
      */
     protected function setup_routes(): void {
-        // The index: every home you belong to.
+        // The index: your day, across every home you belong to.
         $this->app->route( '' );
+        // Every home you belong to, and where a new one is started.
+        $this->app->route( 'homes', 'homes.php' );
         // Who is at which home, day by day, across the homes you belong to.
         $this->app->route( 'where', 'where.php' );
         // Everything kept across the homes you belong to, and where it is.
@@ -90,19 +92,20 @@ class App extends BaseApp {
         $base = home_url( '/' . $this->get_url_path() . '/' );
         $user_id = get_current_user_id();
         if ( ! $user_id ) {
-            $this->app->add_menu_item( 'index', __( 'Your homes', 'households' ), $base );
+            $this->app->add_menu_item( 'index', __( 'Your day', 'households' ), $base );
             return;
         }
 
         $person_id = Access::person_for_user( $user_id );
         $homes = $this->storage->get_homes_for_person( $person_id );
-        $this->app->add_menu_item( 'index', count( $homes ) > 1 ? __( 'Your homes', 'households' ) : __( 'Home', 'households' ), $base );
+        $this->app->add_menu_item( 'index', __( 'Your day', 'households' ), $base );
 
         // Each home is a place you go to, not a mode you switch into.
         foreach ( $homes as $home ) {
             $this->app->add_menu_item( 'home-' . $home['id'], $home['name'], $base . $home['id'] . '/' );
         }
 
+        $this->app->add_menu_item( 'homes', __( 'Your homes', 'households' ), $base . 'homes/' );
         $this->app->add_menu_item( 'where', __( 'Who is where', 'households' ), $base . 'where/' );
         $this->app->add_menu_item( 'things', __( 'Things', 'households' ), $base . 'things/' );
 
@@ -157,9 +160,8 @@ class App extends BaseApp {
     }
 
     /**
-     * Every home is addressed by its term ID, so both of these run before
-     * anything is rendered: one sends a lone householder straight in, the other
-     * turns away a request for a home the viewer does not belong to.
+     * Every home is addressed by its term ID, so a request for one the viewer
+     * does not belong to is turned away before anything is rendered.
      */
     public function route_by_home(): void {
         $path = $this->app_request_path();
@@ -167,23 +169,13 @@ class App extends BaseApp {
             return;
         }
 
-        $user_id = get_current_user_id();
-        $person_id = Access::person_for_user( $user_id );
-        $index = home_url( '/' . $this->get_url_path() . '/' );
-
-        if ( '' === $path ) {
-            $homes = Access::home_ids_for_person( $person_id );
-            if ( 1 === count( $homes ) ) {
-                wp_safe_redirect( $index . $homes[0] . '/' );
-                exit;
-            }
-            return;
-        }
-
         if ( ! preg_match( '#^(\d+)(?:/|$)#', $path, $matches ) ) {
             return;
         }
 
+        $user_id = get_current_user_id();
+        $person_id = Access::person_for_user( $user_id );
+        $index = home_url( '/' . $this->get_url_path() . '/' );
         $home_id = (int) $matches[1];
         if ( ! Access::is_member( $person_id, $home_id ) ) {
             wp_safe_redirect( $index );
@@ -301,8 +293,32 @@ class App extends BaseApp {
             }
         };
 
-        if ( 'get_homes' === $action ) {
-            wp_send_json_success( [ 'homes' => $this->storage->get_homes_overview( $user_id ) ] );
+        // The index is about the viewer, so it is answered before any home is
+        // resolved: it spans all of them, and belonging to none is an answer.
+        if ( 'get_my_day' === $action ) {
+            wp_send_json_success( $this->storage->get_my_day( $user_id ) );
+        }
+
+        // The homes page spans homes and is the one place that answers before
+        // you belong to any: it is where the first one is started.
+        if ( 'get_homes' === $action || 'start_home' === $action ) {
+            $started = 'start_home' === $action ? $this->storage->start_home( $user_id, $post( 'name' ) ) : 0;
+            wp_send_json_success( [
+                'homes'   => $this->storage->get_homes_overview( $user_id ),
+                'started' => $started,
+            ] );
+        }
+
+        // Saying where you are is something anyone may do about themselves,
+        // child or not: it is a statement about your own day rather than a
+        // change to anybody's arrangement. Saying it about someone else is
+        // organising, and stays where it was.
+        if ( 'say_where' === $action ) {
+            $said_home = $post( 'said_home_id', 'int' );
+            $this->assert_allowed( $viewer_person && ( ! $said_home || Access::is_member( $viewer_person, $said_home ) ) );
+            Whereabouts::set_override( $viewer_person, $post( 'date' ) ?: current_time( 'Y-m-d' ), $said_home );
+            Whereabouts::prune_overrides( $viewer_person );
+            wp_send_json_success( $this->storage->get_my_day( $user_id ) );
         }
 
         if ( 'get_things' === $action ) {
