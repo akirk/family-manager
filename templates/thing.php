@@ -120,15 +120,10 @@ require __DIR__ . '/_head.php';
         </section>
 
         <?php if ( $hh_writing ) : ?>
-            <section>
-                <div class="row heading">
-                    <h2><?php echo esc_html__( 'Gone for good', 'households' ); ?></h2>
-                    <form method="post">
-                        <?php View::fields( 'remove_note', [ 'kind' => 'item', 'note_id' => $hh_thing['id'], 'home_id' => $hh_thing['home_id'] ] ); ?>
-                        <button type="submit" class="quiet"><?php echo esc_html__( 'Remove', 'households' ); ?></button>
-                    </form>
-                </div>
-                <p class="meta" style="margin:0"><?php echo esc_html__( 'For something the family no longer has. Something that has only gone to another house is moved instead.', 'households' ); ?></p>
-            </section>
+            <?php // For something the family no longer has. Something that has only gone to another house is moved, which the section above is for, so this is one line and not a box asking to be read. ?>
+            <form method="post" style="margin-bottom:16px">
+                <?php View::fields( 'remove_note', [ 'kind' => 'item', 'note_id' => $hh_thing['id'], 'home_id' => $hh_thing['home_id'] ] ); ?>
+                <button type="submit" class="quiet"><?php echo esc_html__( 'Delete this thing', 'households' ); ?></button>
+            </form>
         <?php endif; ?>
 <?php require __DIR__ . '/_foot.php'; ?>
