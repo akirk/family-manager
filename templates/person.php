@@ -19,7 +19,7 @@ $hh_title = $hh_person ? $hh_person['name'] : __( 'A person', 'households' );
 
 require __DIR__ . '/_head.php';
 ?>
-        <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Your day', 'households' ); ?></a>
+        <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Overview', 'households' ); ?></a>
         <?php if ( ! $hh_person ) : ?>
             <h1><?php echo esc_html__( 'A person', 'households' ); ?></h1>
             <p class="subtitle"><?php echo esc_html__( 'There is nobody here you are allowed to look at.', 'households' ); ?></p>

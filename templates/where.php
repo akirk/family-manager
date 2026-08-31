@@ -39,7 +39,7 @@ $hh_title = __( 'Who is where', 'households' );
 
 require __DIR__ . '/_head.php';
 ?>
-        <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Your day', 'households' ); ?></a>
+        <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Overview', 'households' ); ?></a>
         <h1><?php echo esc_html__( 'Who is where', 'households' ); ?></h1>
         <p class="subtitle"><?php echo esc_html__( 'Everyone across the households you belong to, and where they are today.', 'households' ); ?></p>
         <?php View::notice(); ?>

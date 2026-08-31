@@ -99,13 +99,13 @@ class App extends BaseApp {
         $base = home_url( '/' . $this->get_url_path() . '/' );
         $user_id = get_current_user_id();
         if ( ! $user_id ) {
-            $this->app->add_menu_item( 'index', __( 'Your day', 'households' ), $base );
+            $this->app->add_menu_item( 'index', __( 'Overview', 'households' ), $base );
             return;
         }
 
         $person_id = Access::person_for_user( $user_id );
         $homes = $this->storage->get_homes_for_user( $user_id );
-        $this->app->add_menu_item( 'index', __( 'Your day', 'households' ), $base );
+        $this->app->add_menu_item( 'index', __( 'Overview', 'households' ), $base );
 
         // Each home is a place you go to, not a mode you switch into.
         foreach ( $homes as $home ) {
@@ -389,14 +389,39 @@ class App extends BaseApp {
 
         // Saying where you are is something anyone may do about themselves,
         // child or not: it is a statement about your own day rather than a
-        // change to anybody's arrangement.
+        // change to anybody's arrangement. Others can be named alongside you —
+        // whoever is going too, because a parent and the children are one trip
+        // — and each of them is a person you organise for. Named nobody, it is
+        // about you, which is what the plain buttons post.
         if ( 'say_where' === $action ) {
-            $said_home = $post( 'said_home_id', 'int' );
-            if ( ! $viewer_person || ( $said_home && ! $this->put_person_at( $viewer_person, $said_home ) ) ) {
+            if ( ! $viewer_person ) {
                 return $this->refuse();
             }
-            Whereabouts::set_override( $viewer_person, $post( 'date' ) ?: current_time( 'Y-m-d' ), $said_home );
-            Whereabouts::prune_overrides( $viewer_person );
+            $said_home = $post( 'said_home_id', 'int' );
+            $going = array_map( 'absint', (array) ( isset( $_POST['people'] ) ? wp_unslash( $_POST['people'] ) : [] ) );
+            $going = array_values( array_unique( array_filter( $going ) ) ) ?: [ $viewer_person ];
+
+            // Asked of everybody before anybody is moved: half a party arriving
+            // because the last name in the list was refused is worse than none.
+            // Somebody who has never been to the home is being sent there for
+            // the first time, which only whoever organises it may do.
+            $may_send = $said_home && current_user_can( 'organise_household', $said_home );
+            foreach ( $going as $person_id ) {
+                if ( ! Access::can_place_person( $user_id, $person_id ) ) {
+                    return $this->refuse();
+                }
+                if ( $said_home && ! $may_send && ! Access::is_member( $person_id, $said_home ) ) {
+                    return $this->refuse();
+                }
+            }
+            $date = $post( 'date' ) ?: current_time( 'Y-m-d' );
+            foreach ( $going as $person_id ) {
+                if ( $said_home && ! $this->put_person_at( $person_id, $said_home ) ) {
+                    return $this->refuse();
+                }
+                Whereabouts::set_override( $person_id, $date, $said_home );
+                Whereabouts::prune_overrides( $person_id );
+            }
             return $this->done();
         }
 

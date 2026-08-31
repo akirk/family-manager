@@ -625,47 +625,38 @@ class Storage {
     public function get_my_day( int $user_id ): array {
         $viewer = Access::person_for_user( $user_id );
         $today = current_time( 'Y-m-d' );
-        $tasks = $this->open_tasks_for( $user_id, $today );
+        $where = $this->where_person_is( $viewer, $today );
 
         return [
             'person' => $this->get_person( $viewer ),
             'today'  => $today,
-            'where'  => $this->where_person_is( $viewer, $today ),
-            // What is asked of you by name, and what the house has asked of
-            // nobody in particular. What is asked of someone else is theirs.
-            'yours'  => array_values( array_filter( $tasks, static function( array $task ) use ( $viewer ): bool {
-                return $task['person_id'] === $viewer;
-            } ) ),
-            'shared' => array_values( array_filter( $tasks, static function( array $task ): bool {
-                return ! $task['person_id'];
-            } ) ),
+            'where'  => $where,
+            // The household you are standing in, read exactly as its own page
+            // reads it: what is written down there, what is kept there, and who
+            // is in it. Not knowing where you are, there is nothing to read.
+            'here'   => $where['home_id'] ? $this->get_dashboard( $user_id, $where['home_id'] ) : [],
+            // Who could go with you, so the page can offer them by name.
+            'party'  => $this->people_you_can_place( $user_id ),
             'agenda' => $this->get_agenda( $user_id, $viewer, $today, self::AGENDA_DAYS ),
             'homes'  => $this->get_homes_overview( $user_id ),
         ];
     }
 
     /**
-     * Every open task across the homes a person belongs to, each naming the
-     * home it was written down in. Soonest first; undated last.
+     * Everyone this viewer may say a day for: themselves, and anyone in a
+     * household they organise. Each says where they are today, which is how the
+     * page can mark the ones already under the roof being asked about.
+     *
+     * @return array[] people as `get_people_overview` says them.
      */
-    private function open_tasks_for( int $user_id, string $today ): array {
-        $tasks = [];
-        foreach ( $this->get_homes_for_user( $user_id ) as $home ) {
-            foreach ( $this->get_tasks( $home['id'] ) as $task ) {
-                if ( $task['is_done'] ) {
-                    continue;
-                }
-                $task['home_id'] = $home['id'];
-                $task['home_name'] = $home['name'];
-                $task['is_overdue'] = '' !== $task['due_date'] && $task['due_date'] < $today;
-                $task['due_label'] = $this->say_date( $task['due_date'], $today );
-                $tasks[] = $task;
+    public function people_you_can_place( int $user_id ): array {
+        $people = [];
+        foreach ( $this->get_people_overview( $user_id ) as $person ) {
+            if ( Access::can_place_person( $user_id, $person['id'] ) ) {
+                $people[] = $person;
             }
         }
-        usort( $tasks, static function( array $a, array $b ): int {
-            return strcmp( $a['due_date'] ?: '9999-12-31', $b['due_date'] ?: '9999-12-31' );
-        } );
-        return $tasks;
+        return $people;
     }
 
     /**
