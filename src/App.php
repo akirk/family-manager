@@ -10,11 +10,15 @@ class App extends BaseApp {
         // See https://github.com/akirk/wp-app for documentation.
         $this->app = new WpApp( $this->get_template_dir(), $this->get_url_path(), [
             'require_login'       => true,
-            'show_wp_logo'        => true,
-            'show_site_name'      => true,
             'app_name'            => $this->get_plugin_name(),
             'app_name_textdomain' => 'households',
             'launcher'            => true,
+            // A roof in the launcher, in the terracotta the app already uses
+            // for its warm accent, so the tile and the pages agree.
+            'app_icon'            => 'dashicons-admin-home',
+            'app_icon_background' => 'linear-gradient(135deg, #9b5d2f, #d29561)',
+            'app_icon_color'      => '#fff',
+            'app_icon_shadow'     => true,
             // Owned content: REST reads are gated with the app's capability and
             // OpenStation keeps these menus out of its dock.
             'post_types'          => [ Access::PERSON, Storage::FACT, Storage::ITEM, Storage::TASK ],

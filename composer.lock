@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "106cd49f4f1c9c03e5e91cf51db94a7d",
+    "content-hash": "e89de00592dfaca20b59b66a7ca78662",
     "packages": [
         {
             "name": "akirk/wp-app",
-            "version": "v1.6.2",
+            "version": "v1.6.3",
             "source": {
                 "type": "git",
                 "url": "https://github.com/akirk/wp-app.git",
-                "reference": "e862f7f7ac5524fa4344b7eff2e5ffc887f5455d"
+                "reference": "ca7813794410764fcdb5a15b41d2942b9b6b3b78"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/akirk/wp-app/zipball/e862f7f7ac5524fa4344b7eff2e5ffc887f5455d",
-                "reference": "e862f7f7ac5524fa4344b7eff2e5ffc887f5455d",
+                "url": "https://api.github.com/repos/akirk/wp-app/zipball/ca7813794410764fcdb5a15b41d2942b9b6b3b78",
+                "reference": "ca7813794410764fcdb5a15b41d2942b9b6b3b78",
                 "shasum": ""
             },
             "require": {
@@ -57,9 +57,9 @@
             "description": "A framework to build frontend apps on WordPress with routing, admin bar integration, and theme isolation",
             "support": {
                 "issues": "https://github.com/akirk/wp-app/issues",
-                "source": "https://github.com/akirk/wp-app/tree/v1.6.2"
+                "source": "https://github.com/akirk/wp-app/tree/v1.6.3"
             },
-            "time": "2026-08-27T07:53:51+00:00"
+            "time": "2026-08-29T18:09:23+00:00"
         }
     ],
     "packages-dev": [],
