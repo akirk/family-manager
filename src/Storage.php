@@ -393,16 +393,82 @@ class Storage {
         return $post_id;
     }
 
-    public function update_note( int $home_id, string $post_type, int $post_id, string $title, string $detail ): bool {
+    public function update_note( int $home_id, string $post_type, int $post_id, string $title, string $detail, ?string $note = null ): bool {
         if ( ! $this->note_belongs_to( $post_id, $post_type, $home_id ) || '' === trim( $title ) ) {
+            return false;
+        }
+        $fields = [
+            'ID'           => $post_id,
+            'post_content' => wp_kses_post( $detail ),
+            'post_title'   => sanitize_text_field( $title ),
+        ];
+        // Said nothing about the note and the note is left alone; a form that
+        // does not carry it is not a form emptying it.
+        if ( null !== $note ) {
+            $fields['post_excerpt'] = wp_kses_post( $note );
+        }
+        wp_update_post( $fields );
+        return true;
+    }
+
+    /**
+     * The note as it has read over time, newest first and each wording said
+     * once: a run of saves that left it alone is not a history of anything.
+     *
+     * @return array[] each with the revision to put back, when it was written
+     *                 and by whom.
+     */
+    public function get_note_history( int $post_id, string $post_type ): array {
+        $post = get_post( $post_id );
+        if ( ! $post || $post_type !== $post->post_type ) {
+            return [];
+        }
+        $history = [];
+        $newer = (string) $post->post_excerpt;
+        foreach ( wp_get_post_revisions( $post_id, [ 'check_enabled' => false ] ) as $revision ) {
+            $note = (string) $revision->post_excerpt;
+            if ( $note === $newer ) {
+                continue;
+            }
+            $history[] = [
+                'id'   => (int) $revision->ID,
+                'note' => $note,
+                'when' => $revision->post_modified,
+                'who'  => $this->who_saved( (int) $revision->post_author ),
+            ];
+            $newer = $note;
+        }
+        return $history;
+    }
+
+    /**
+     * Put an older wording of the note back. Only the note: the name and where
+     * it lives are what they are now, and were not what was asked about.
+     */
+    public function restore_note( int $home_id, string $post_type, int $post_id, int $revision_id ): bool {
+        if ( ! $this->note_belongs_to( $post_id, $post_type, $home_id ) ) {
+            return false;
+        }
+        $revision = wp_get_post_revision( $revision_id );
+        if ( ! $revision || (int) $revision->post_parent !== $post_id ) {
             return false;
         }
         wp_update_post( [
             'ID'           => $post_id,
-            'post_content' => wp_kses_post( $detail ),
-            'post_title'   => sanitize_text_field( $title ),
+            'post_excerpt' => $revision->post_excerpt,
         ] );
         return true;
+    }
+
+    /** Whoever saved it, said the way the family says their name. */
+    private function who_saved( int $user_id ): string {
+        $person = $user_id ? Access::person_for_user( $user_id ) : 0;
+        $named = $person ? $this->get_person( $person ) : [];
+        if ( ! empty( $named['name'] ) ) {
+            return $named['name'];
+        }
+        $user = $user_id ? get_userdata( $user_id ) : null;
+        return $user ? $user->display_name : '';
     }
 
     /**
@@ -443,6 +509,38 @@ class Storage {
             ];
         }
         return $notes;
+    }
+
+    /**
+     * One note by ID, with the household it is at — or nothing at all, if that
+     * is not what the ID is.
+     *
+     * A note is in one household, which is what makes a page of its own
+     * possible: there is exactly one answer to where it is.
+     */
+    public function get_note( int $post_id, string $post_type ): array {
+        $post = $post_id ? get_post( $post_id ) : null;
+        if ( ! $post || $post_type !== $post->post_type ) {
+            return [];
+        }
+        $home_ids = $this->home_ids_of_post( $post_id );
+        $home = $home_ids ? $this->get_home( $home_ids[0] ) : [];
+        if ( ! $home ) {
+            return [];
+        }
+        return [
+            'id'        => (int) $post->ID,
+            'title'     => $post->post_title,
+            'detail'    => $post->post_content,
+            // What is worth remembering about the thing, as against the line
+            // saying where it lives. It is kept in the excerpt because that is
+            // one of the three fields WordPress writes revisions of, so its
+            // history is kept without keeping it.
+            'note'      => $post->post_excerpt,
+            'modified'  => $post->post_modified,
+            'home_id'   => (int) $home['id'],
+            'home_name' => $home['name'],
+        ];
     }
 
     private function note_belongs_to( int $post_id, string $post_type, int $home_id ): bool {
@@ -625,47 +723,38 @@ class Storage {
     public function get_my_day( int $user_id ): array {
         $viewer = Access::person_for_user( $user_id );
         $today = current_time( 'Y-m-d' );
-        $tasks = $this->open_tasks_for( $user_id, $today );
+        $where = $this->where_person_is( $viewer, $today );
 
         return [
             'person' => $this->get_person( $viewer ),
             'today'  => $today,
-            'where'  => $this->where_person_is( $viewer, $today ),
-            // What is asked of you by name, and what the house has asked of
-            // nobody in particular. What is asked of someone else is theirs.
-            'yours'  => array_values( array_filter( $tasks, static function( array $task ) use ( $viewer ): bool {
-                return $task['person_id'] === $viewer;
-            } ) ),
-            'shared' => array_values( array_filter( $tasks, static function( array $task ): bool {
-                return ! $task['person_id'];
-            } ) ),
+            'where'  => $where,
+            // The household you are standing in, read exactly as its own page
+            // reads it: what is written down there, what is kept there, and who
+            // is in it. Not knowing where you are, there is nothing to read.
+            'here'   => $where['home_id'] ? $this->get_dashboard( $user_id, $where['home_id'] ) : [],
+            // Who could go with you, so the page can offer them by name.
+            'party'  => $this->people_you_can_place( $user_id ),
             'agenda' => $this->get_agenda( $user_id, $viewer, $today, self::AGENDA_DAYS ),
             'homes'  => $this->get_homes_overview( $user_id ),
         ];
     }
 
     /**
-     * Every open task across the homes a person belongs to, each naming the
-     * home it was written down in. Soonest first; undated last.
+     * Everyone this viewer may say a day for: themselves, and anyone in a
+     * household they organise. Each says where they are today, which is how the
+     * page can mark the ones already under the roof being asked about.
+     *
+     * @return array[] people as `get_people_overview` says them.
      */
-    private function open_tasks_for( int $user_id, string $today ): array {
-        $tasks = [];
-        foreach ( $this->get_homes_for_user( $user_id ) as $home ) {
-            foreach ( $this->get_tasks( $home['id'] ) as $task ) {
-                if ( $task['is_done'] ) {
-                    continue;
-                }
-                $task['home_id'] = $home['id'];
-                $task['home_name'] = $home['name'];
-                $task['is_overdue'] = '' !== $task['due_date'] && $task['due_date'] < $today;
-                $task['due_label'] = $this->say_date( $task['due_date'], $today );
-                $tasks[] = $task;
+    public function people_you_can_place( int $user_id ): array {
+        $people = [];
+        foreach ( $this->get_people_overview( $user_id ) as $person ) {
+            if ( Access::can_place_person( $user_id, $person['id'] ) ) {
+                $people[] = $person;
             }
         }
-        usort( $tasks, static function( array $a, array $b ): int {
-            return strcmp( $a['due_date'] ?: '9999-12-31', $b['due_date'] ?: '9999-12-31' );
-        } );
-        return $tasks;
+        return $people;
     }
 
     /**

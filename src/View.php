@@ -42,9 +42,21 @@ class View {
         return self::base() . 'person/' . $person_id . '/';
     }
 
+    public static function thing_url( int $note_id ): string {
+        return self::base() . 'thing/' . $note_id . '/';
+    }
+
     /** A date as the app says it out loud: today, tomorrow, or "Fri 4 Sep". */
     public static function date( string $date ): string {
         return self::storage()->say_date( $date );
+    }
+
+    /**
+     * A moment something was written down: the day, and the time after it.
+     * WordPress keeps these in the site's own time, and reads them back so.
+     */
+    public static function when( string $stamp ): string {
+        return $stamp ? mysql2date( 'D j M Y, H:i', $stamp ) : '';
     }
 
     /**

@@ -23,7 +23,7 @@ if ( ! $hh ) {
     return;
 }
 ?>
-        <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Your day', 'households' ); ?></a>
+        <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Overview', 'households' ); ?></a>
         <h1><?php echo esc_html__( 'Manage this household', 'households' ); ?></h1>
         <p class="subtitle"><?php echo esc_html( $hh['home']['name'] ); ?></p>
         <?php View::notice(); ?>

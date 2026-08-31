@@ -69,7 +69,43 @@ $hh_title = isset( $hh_title ) && '' !== trim( $hh_title ) ? $hh_title : __( 'Ho
         .hh-scroller td { border-right: 1px solid var(--hh-line); border-bottom: 1px solid var(--hh-line); }
         .status[data-error] { color: var(--hh-warm); }
         section { background: var(--hh-surface); border: 1px solid var(--hh-line); border-radius: 8px; padding: 16px; margin: 0 0 16px; }
+        /* The overview reads in two: what today asks of you on one side, where
+           everyone is on the other. The sections keep their own spacing, so the
+           columns want a gap across and none down. A phone gets one column, and
+           the order the sections are written in is the order they fall into. */
+        .columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 16px; align-items: start; }
+        @media (max-width: 760px) { .columns { grid-template-columns: minmax(0, 1fr); } }
+        /* A household is one line: its name, who is under it, and the arrow that
+           opens who is going. The line you are at is the one that is filled in,
+           so nothing has to say it in words. The marker is drawn rather than the
+           browser's, which a flex summary does not show. */
+        ul.homes { gap: 2px; }
+        details.home > summary { display: flex; align-items: baseline; gap: 10px; padding: 6px 8px; border-radius: 6px; cursor: pointer; list-style: none; }
+        details.home > summary::-webkit-details-marker { display: none; }
+        details.home > summary::after { content: "\25B8"; color: var(--hh-muted); }
+        details.home[open] > summary::after { content: "\25BE"; }
+        details.home > summary:hover { background: color-mix(in srgb, var(--hh-accent) 7%, transparent); }
+        details.home.at > summary { background: color-mix(in srgb, var(--hh-accent) 13%, transparent); }
+        details.home .who { flex: 1 1 auto; min-width: 0; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        details.home .going { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0 8px; padding-left: 8px; }
         section > h2 { margin: 0 0 10px; font-size: 1.05rem; }
+        /* A section's own line: what it is on the left, what can be done with it
+           on the right. The heading keeps its size and gives up its margin. */
+        .row.heading { align-items: center; margin: 0 0 10px; }
+        .row.heading > h2 { margin: 0; font-size: 1.05rem; }
+        .pill.on { background: var(--hh-accent); color: #fff; }
+        a.pill { text-decoration: none; }
+        /* Writing something down is one line until it is wanted. */
+        details.add { margin-top: 12px; }
+        details.add > summary { display: inline-block; cursor: pointer; list-style: none; color: var(--hh-accent-strong); font-weight: 700; font-size: 0.9rem; }
+        details.add > summary::-webkit-details-marker { display: none; }
+        details.add > form { margin-top: 10px; }
+        /* Sitting in a section's own line it keeps to the right, and opening it
+           takes the whole width of that line rather than a corner of it. */
+        .row.heading details.add { margin-top: 0; }
+        .row.heading details.add[open] { flex: 1 1 100%; }
+        /* Beside other controls it is the whole group that gives up the line. */
+        .row.heading .actions:has(details.add[open]) { flex: 1 1 100%; }
         ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
         .row { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
         .meta { color: var(--hh-muted); font-size: 0.9rem; }
@@ -87,11 +123,16 @@ $hh_title = isset( $hh_title ) && '' !== trim( $hh_title ) ? $hh_title : __( 'Ho
         label.inline input { width: auto; min-height: 0; }
         form.grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); align-items: end; }
         form.grid .wide { grid-column: 1 / -1; }
+        /* Prose somebody typed, kept with the line breaks they typed. */
+        p.note { margin: 8px 0 0; white-space: pre-wrap; }
         .done { text-decoration: line-through; color: var(--hh-muted); }
         form.inline { display: inline; }
         .actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
         .grow { flex: 1 1 240px; }
         p.status { margin: 0 0 12px; }
+        /* What a page falls back on when its script did not run. The script says
+           so on the document itself, which no section being exchanged can undo. */
+        html[data-hh-live] [data-hh-fallback] { display: none; }
         [hidden] { display: none !important; }
     </style>
 </head>

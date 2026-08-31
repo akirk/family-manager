@@ -24,7 +24,7 @@ if ( ! $hh ) {
 $hh_can_organise = $hh['viewer']['can_organise'];
 $hh_writing = $hh_can_organise && ! $hh['viewer']['viewing_as'];
 ?>
-        <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Your day', 'households' ); ?></a>
+        <a class="back" href="<?php echo esc_url( View::base() ); ?>">&larr; <?php echo esc_html__( 'Overview', 'households' ); ?></a>
         <h1><?php echo esc_html( $hh['home']['name'] ); ?></h1>
         <p class="subtitle">
             <?php
@@ -56,11 +56,42 @@ $hh_writing = $hh_can_organise && ! $hh['viewer']['viewing_as'];
         <?php endif; ?>
 
         <section>
-            <h2><?php echo esc_html__( 'To do', 'households' ); ?></h2>
-            <ul class="plain">
-                <?php if ( ! $hh['tasks'] ) : ?>
-                    <li class="empty"><?php echo esc_html__( 'Nothing to do.', 'households' ); ?></li>
+            <?php // Writing something down belongs on the section's own line, so a section with nothing in it is one line rather than three. ?>
+            <div class="row heading">
+                <h2><?php echo esc_html__( 'To do', 'households' ); ?></h2>
+                <?php if ( $hh_writing ) : ?>
+                    <details class="add">
+                        <summary><?php echo esc_html__( '+ Add', 'households' ); ?></summary>
+                        <form method="post" class="grid">
+                            <?php View::fields( 'add_task' ); ?>
+                            <label class="wide"><?php echo esc_html__( 'What needs doing', 'households' ); ?>
+                                <input type="text" name="title" required>
+                            </label>
+                            <label><?php echo esc_html__( 'For whom', 'households' ); ?>
+                                <select name="person_id">
+                                    <option value="0"><?php echo esc_html__( 'Everyone', 'households' ); ?></option>
+                                    <?php foreach ( $hh['people'] as $hh_person ) : ?>
+                                        <option value="<?php echo (int) $hh_person['id']; ?>"><?php echo esc_html( $hh_person['name'] ); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </label>
+                            <label><?php echo esc_html__( 'Kind', 'households' ); ?>
+                                <select name="task_type">
+                                    <option value="task"><?php echo esc_html__( 'Task', 'households' ); ?></option>
+                                    <option value="appointment"><?php echo esc_html__( 'Appointment', 'households' ); ?></option>
+                                </select>
+                            </label>
+                            <label><?php echo esc_html__( 'When', 'households' ); ?>
+                                <input type="date" name="due_date">
+                            </label>
+                            <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
+                        </form>
+                    </details>
+                <?php elseif ( ! $hh['tasks'] ) : ?>
+                    <span class="meta"><?php echo esc_html__( 'Nothing to do.', 'households' ); ?></span>
                 <?php endif; ?>
+            </div>
+            <ul class="plain">
                 <?php foreach ( $hh['tasks'] as $hh_task ) : ?>
                     <?php
                     $hh_bits = [ $hh_task['person'] ? $hh_task['person'] : __( 'Everyone', 'households' ) ];
@@ -92,41 +123,26 @@ $hh_writing = $hh_can_organise && ! $hh['viewer']['viewing_as'];
                 <?php endforeach; ?>
             </ul>
 
-            <?php if ( $hh_writing ) : ?>
-                <form method="post" class="grid" style="margin-top:12px">
-                    <?php View::fields( 'add_task' ); ?>
-                    <label class="wide"><?php echo esc_html__( 'What needs doing', 'households' ); ?>
-                        <input type="text" name="title" required>
-                    </label>
-                    <label><?php echo esc_html__( 'For whom', 'households' ); ?>
-                        <select name="person_id">
-                            <option value="0"><?php echo esc_html__( 'Everyone', 'households' ); ?></option>
-                            <?php foreach ( $hh['people'] as $hh_person ) : ?>
-                                <option value="<?php echo (int) $hh_person['id']; ?>"><?php echo esc_html( $hh_person['name'] ); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </label>
-                    <label><?php echo esc_html__( 'Kind', 'households' ); ?>
-                        <select name="task_type">
-                            <option value="task"><?php echo esc_html__( 'Task', 'households' ); ?></option>
-                            <option value="appointment"><?php echo esc_html__( 'Appointment', 'households' ); ?></option>
-                        </select>
-                    </label>
-                    <label><?php echo esc_html__( 'When', 'households' ); ?>
-                        <input type="date" name="due_date">
-                    </label>
-                    <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-                </form>
-            <?php endif; ?>
         </section>
 
         <section>
-            <h2><?php echo esc_html__( 'About this household', 'households' ); ?></h2>
-            <p class="meta"><?php echo esc_html__( 'What the household needs you to know: the wifi, where the water main valve is, which day the bins go out.', 'households' ); ?></p>
-            <ul class="plain">
-                <?php if ( ! $hh['facts'] ) : ?>
-                    <li class="empty"><?php echo esc_html__( 'Nothing written down yet.', 'households' ); ?></li>
+            <div class="row heading">
+                <h2><?php echo esc_html__( 'About this household', 'households' ); ?></h2>
+                <?php if ( $hh_writing ) : ?>
+                    <details class="add">
+                        <summary><?php echo esc_html__( '+ Add', 'households' ); ?></summary>
+                        <form method="post" class="grid">
+                            <?php View::fields( 'add_note', [ 'kind' => 'fact' ] ); ?>
+                            <label><?php echo esc_html__( 'Label', 'households' ); ?><input type="text" name="title" required></label>
+                            <label class="wide"><?php echo esc_html__( 'Detail', 'households' ); ?><input type="text" name="detail"></label>
+                            <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
+                        </form>
+                    </details>
+                <?php elseif ( ! $hh['facts'] ) : ?>
+                    <span class="meta"><?php echo esc_html__( 'Nothing written down yet.', 'households' ); ?></span>
                 <?php endif; ?>
+            </div>
+            <ul class="plain">
                 <?php foreach ( $hh['facts'] as $hh_note ) : ?>
                     <li class="row">
                         <div class="grow">
@@ -143,26 +159,30 @@ $hh_writing = $hh_can_organise && ! $hh['viewer']['viewing_as'];
                 <?php endforeach; ?>
             </ul>
 
-            <?php if ( $hh_writing ) : ?>
-                <form method="post" class="grid" style="margin-top:12px">
-                    <?php View::fields( 'add_note', [ 'kind' => 'fact' ] ); ?>
-                    <label><?php echo esc_html__( 'Label', 'households' ); ?><input type="text" name="title" required></label>
-                    <label class="wide"><?php echo esc_html__( 'Detail', 'households' ); ?><input type="text" name="detail"></label>
-                    <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-                </form>
-            <?php endif; ?>
         </section>
 
         <section>
-            <h2><?php echo esc_html__( 'Things kept here', 'households' ); ?></h2>
-            <ul class="plain">
-                <?php if ( ! $hh['items'] ) : ?>
-                    <li class="empty"><?php echo esc_html__( 'Nothing listed yet.', 'households' ); ?></li>
+            <div class="row heading">
+                <h2><?php echo esc_html__( 'Things kept here', 'households' ); ?></h2>
+                <?php if ( $hh_writing ) : ?>
+                    <details class="add">
+                        <summary><?php echo esc_html__( '+ Add', 'households' ); ?></summary>
+                        <form method="post" class="grid">
+                            <?php View::fields( 'add_note', [ 'kind' => 'item' ] ); ?>
+                            <label><?php echo esc_html__( 'Thing', 'households' ); ?><input type="text" name="title" required></label>
+                            <label class="wide"><?php echo esc_html__( 'Where it lives', 'households' ); ?><input type="text" name="detail"></label>
+                            <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
+                        </form>
+                    </details>
+                <?php elseif ( ! $hh['items'] ) : ?>
+                    <span class="meta"><?php echo esc_html__( 'Nothing listed yet.', 'households' ); ?></span>
                 <?php endif; ?>
+            </div>
+            <ul class="plain">
                 <?php foreach ( $hh['items'] as $hh_note ) : ?>
                     <li class="row">
                         <div class="grow">
-                            <strong><?php echo esc_html( $hh_note['title'] ); ?></strong>
+                            <strong><a href="<?php echo esc_url( View::thing_url( $hh_note['id'] ) ); ?>"><?php echo esc_html( $hh_note['title'] ); ?></a></strong>
                             <div class="meta"><?php echo esc_html( $hh_note['detail'] ); ?></div>
                         </div>
                         <?php if ( $hh_writing ) : ?>
@@ -185,14 +205,6 @@ $hh_writing = $hh_can_organise && ! $hh['viewer']['viewing_as'];
                 <?php endforeach; ?>
             </ul>
 
-            <?php if ( $hh_writing ) : ?>
-                <form method="post" class="grid" style="margin-top:12px">
-                    <?php View::fields( 'add_note', [ 'kind' => 'item' ] ); ?>
-                    <label><?php echo esc_html__( 'Thing', 'households' ); ?><input type="text" name="title" required></label>
-                    <label class="wide"><?php echo esc_html__( 'Where it lives', 'households' ); ?><input type="text" name="detail"></label>
-                    <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
-                </form>
-            <?php endif; ?>
         </section>
 
         <?php if ( $hh['birthdays'] ) : ?>

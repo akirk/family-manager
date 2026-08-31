@@ -303,6 +303,29 @@ class Access {
     }
 
     /**
+     * May this user say where that person is today? True of themselves — a
+     * statement about your own day is anybody's to make — and of anyone in a
+     * household they organise, which is how a parent takes the children along.
+     *
+     * Like the rest of what is asked of a person rather than of a home: whether
+     * you may move them is the same answer read from any household you share.
+     */
+    public static function can_place_person( int $user_id, int $person_id ): bool {
+        if ( ! $person_id ) {
+            return false;
+        }
+        if ( self::person_for_user( $user_id ) === $person_id ) {
+            return true;
+        }
+        foreach ( self::home_ids_for_person( $person_id ) as $home_id ) {
+            if ( self::can_organise( $user_id, $home_id ) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * May this user look at that person's own view? True for themselves, and
      * for anyone administering a home the person belongs to.
      */

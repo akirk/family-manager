@@ -1,182 +1,442 @@
 <?php
 /**
- * The index is your day, not a directory of houses: where you are, what is
- * asked of you wherever it was written down, and the fortnight ahead across
- * every household you belong to.
+ * The index is your day, not a directory of houses. It reads in two: what the
+ * household you are standing in asks of you and what is kept there on one side;
+ * where everyone is, and what the fortnight holds, on the other.
  */
 
 namespace Households;
 
 $hh_user = View::user_id();
+$hh_me = View::person_id();
 $hh_day = View::storage()->get_my_day( $hh_user );
 $hh_where = $hh_day['where'];
 $hh_homes = $hh_day['homes'];
+// The household you are standing in, as its own page reads it. Nothing says
+// where you are, and there is no household to read: the sections say so.
+$hh_here = $hh_day['here'];
+// Whoever you may say a day for: yourself, and anyone in a household you
+// organise. Nobody to name, and a household is simply somewhere you go.
+$hh_party = $hh_me ? $hh_day['party'] : [];
 
-$hh_title = __( 'Your day', 'households' );
+// What is still open where you are, everybody's by default. Whose it is is a
+// filter rather than a heading, and it is in the URL so it survives a tick and
+// can be passed to somebody else; so is the form for adding one.
+// phpcs:disable WordPress.Security.NonceVerification.Recommended
+$hh_mine = ! empty( $_GET['mine'] );
+$hh_adding = ! empty( $_GET['add'] );
+// phpcs:enable WordPress.Security.NonceVerification.Recommended
+$hh_url = remove_query_arg( 'problem' );
+
+$hh_tasks = [];
+foreach ( isset( $hh_here['tasks'] ) ? $hh_here['tasks'] : [] as $hh_task ) {
+    if ( $hh_task['is_done'] || ( $hh_mine && $hh_task['person_id'] !== $hh_me ) ) {
+        continue;
+    }
+    $hh_tasks[] = $hh_task;
+}
+$hh_can_add = ! empty( $hh_here['viewer']['can_organise'] );
+$hh_open = add_query_arg( 'add', 1, $hh_url );
+$hh_close = remove_query_arg( 'add', $hh_url );
+
+$hh_title = __( 'Overview', 'households' );
 
 require __DIR__ . '/_head.php';
 ?>
-        <h1><?php echo esc_html__( 'Your day', 'households' ); ?></h1>
+        <h1><?php echo esc_html__( 'Overview', 'households' ); ?></h1>
         <p class="subtitle"><?php echo esc_html__( 'Where you are, what is yours to do, and what is coming across your households.', 'households' ); ?></p>
         <?php View::notice(); ?>
 
-        <section>
-            <h2><?php echo esc_html__( 'Today', 'households' ); ?></h2>
-            <?php if ( ! $hh_homes ) : ?>
-                <?php /* Having no household at all is the one thing this page cannot be about. */ ?>
+        <?php if ( ! $hh_homes ) : ?>
+            <?php /* Having no household at all is the one thing this page cannot be about. */ ?>
+            <section>
                 <p style="margin:0">
                     <?php echo esc_html__( 'You do not have a household yet.', 'households' ); ?>
                     <a href="<?php echo esc_url( View::base() . 'homes/' ); ?>"><?php echo esc_html__( 'Add one', 'households' ); ?></a>
                 </p>
-            <?php elseif ( ! View::person_id() ) : ?>
-                <?php // Administering a household is not living in it, and this page is about your day, not theirs. ?>
-                <p style="margin:0"><?php echo esc_html__( 'You are not in any of these households yourself, so there is nothing here about your day. Add yourself to one and this page fills in.', 'households' ); ?></p>
-            <?php elseif ( $hh_where['known'] ) : ?>
-                <p style="margin:0">
-                    <?php
-                    printf(
-                        /* translators: %s: the name of a household. */
-                        esc_html__( 'You are at %s today.', 'households' ),
-                        '<a href="' . esc_url( View::home_url( $hh_where['home_id'] ) ) . '">' . esc_html( $hh_where['name'] ) . '</a>'
-                    );
-                    ?>
-                    <?php if ( $hh_where['until'] && $hh_where['next_name'] ) : ?>
-                        <span class="meta">
-                            <?php
-                            printf(
-                                /* translators: 1: a date, 2: the name of a household. */
-                                esc_html__( 'Until %1$s, then %2$s.', 'households' ),
-                                esc_html( $hh_where['until_label'] ),
-                                esc_html( $hh_where['next_name'] )
-                            );
-                            ?>
-                        </span>
-                    <?php endif; ?>
-                </p>
-                <p class="meta" style="margin:4px 0 0">
-                    <?php
-                    echo $hh_where['with_you']
-                        ? esc_html( sprintf(
-                            /* translators: %s: a list of names. */
-                            __( 'Here with you: %s.', 'households' ),
-                            implode( ', ', $hh_where['with_you'] )
-                        ) )
-                        : esc_html__( 'Nobody else is here today.', 'households' );
-                    ?>
-                </p>
-            <?php else : ?>
-                <p style="margin:0"><strong><?php echo esc_html__( 'Where are you today?', 'households' ); ?></strong></p>
-                <p class="meta" style="margin:4px 0 0"><?php echo esc_html__( 'Nothing says where you are, so nothing is assumed. Answering is about today alone; it sets up no arrangement.', 'households' ); ?></p>
-            <?php endif; ?>
-
-            <?php
-            // Belong to one household and there is nothing to ask. Belong to
-            // more and the answer is a button per household, the one you are
-            // at pressed.
-            if ( count( $hh_homes ) > 1 ) :
-                ?>
-                <form method="post" class="actions" style="margin-top:10px">
-                    <?php View::fields( 'say_where' ); ?>
-                    <?php foreach ( $hh_homes as $hh_home ) : ?>
-                        <button type="submit" name="said_home_id" value="<?php echo (int) $hh_home['id']; ?>"
-                            class="<?php echo $hh_where['home_id'] === $hh_home['id'] ? 'primary' : ''; ?>"
-                            aria-pressed="<?php echo $hh_where['home_id'] === $hh_home['id'] ? 'true' : 'false'; ?>">
-                            <?php echo esc_html( $hh_home['name'] ); ?>
-                        </button>
-                    <?php endforeach; ?>
-                    <?php if ( $hh_where['said'] ) : ?>
-                        <button type="submit" name="said_home_id" value="0" class="quiet">
-                            <?php echo $hh_where['rotates'] ? esc_html__( 'Back to the pattern', 'households' ) : esc_html__( 'Elsewhere', 'households' ); ?>
-                        </button>
-                    <?php endif; ?>
-                </form>
-            <?php endif; ?>
-        </section>
-
-        <?php if ( $hh_homes ) : ?>
-            <section>
-                <h2><?php echo esc_html__( 'Yours to do', 'households' ); ?></h2>
-                <ul class="plain">
-                    <?php if ( ! $hh_day['yours'] ) : ?>
-                        <li class="empty"><?php echo esc_html__( 'Nothing is asked of you right now.', 'households' ); ?></li>
-                    <?php endif; ?>
-                    <?php foreach ( $hh_day['yours'] as $hh_task ) : ?>
-                        <?php require __DIR__ . '/_task.php'; ?>
-                    <?php endforeach; ?>
-                </ul>
             </section>
+        <?php else : ?>
 
-            <?php if ( $hh_day['shared'] ) : ?>
-                <section>
-                    <h2><?php echo esc_html__( 'Nobody’s yet', 'households' ); ?></h2>
-                    <p class="meta"><?php echo esc_html__( 'Written down for the household rather than for a person. Ticking one is claiming it.', 'households' ); ?></p>
+        <div class="columns">
+            <div>
+                <section id="hh-todo">
+                    <div class="row heading">
+                        <h2>
+                            <?php
+                            echo $hh_where['known']
+                                ? esc_html( sprintf(
+                                    /* translators: %s: the name of a household. */
+                                    __( 'To do in %s', 'households' ),
+                                    $hh_where['name']
+                                ) )
+                                : esc_html__( 'To do', 'households' );
+                            ?>
+                        </h2>
+                        <?php if ( $hh_where['known'] ) : ?>
+                            <div class="actions">
+                                <?php // Everybody's by default, because a household's list is not a private one. The pill says the list it would give you, not the one you are reading. ?>
+                                <a class="pill" data-hh-live
+                                    href="<?php echo esc_url( $hh_mine ? remove_query_arg( 'mine', $hh_url ) : add_query_arg( 'mine', 1, $hh_url ) ); ?>">
+                                    <?php echo $hh_mine ? esc_html__( 'everyone', 'households' ) : esc_html__( 'just me', 'households' ); ?>
+                                </a>
+                                <?php if ( $hh_can_add ) : ?>
+                                    <?php // A link that asks the page for the form; the script opens the one already here instead. ?>
+                                    <a class="pill" data-hh-add href="<?php echo esc_url( $hh_adding ? $hh_close : $hh_open ); ?>"
+                                        data-hh-open="<?php echo esc_url( $hh_open ); ?>" data-hh-close="<?php echo esc_url( $hh_close ); ?>"
+                                        aria-controls="add" aria-expanded="<?php echo $hh_adding ? 'true' : 'false'; ?>"
+                                        aria-label="<?php echo esc_attr__( 'Write something down', 'households' ); ?>"><?php echo $hh_adding ? '&times;' : '+'; ?></a>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+
+                    <?php if ( $hh_can_add ) : ?>
+                        <form method="post" class="grid" id="add" style="margin-bottom:12px" <?php echo $hh_adding ? '' : 'hidden'; ?>>
+                            <?php View::fields( 'add_task', [ 'home_id' => $hh_where['home_id'] ] ); ?>
+                            <label class="wide"><?php echo esc_html__( 'What needs doing', 'households' ); ?>
+                                <input type="text" name="title" required <?php echo $hh_adding ? 'autofocus' : ''; ?>>
+                            </label>
+                            <label><?php echo esc_html__( 'For whom', 'households' ); ?>
+                                <select name="person_id">
+                                    <option value="0"><?php echo esc_html__( 'Everyone', 'households' ); ?></option>
+                                    <?php foreach ( $hh_here['people'] as $hh_person ) : ?>
+                                        <option value="<?php echo (int) $hh_person['id']; ?>"><?php echo esc_html( $hh_person['name'] ); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </label>
+                            <label><?php echo esc_html__( 'Kind', 'households' ); ?>
+                                <select name="task_type">
+                                    <option value="task"><?php echo esc_html__( 'Task', 'households' ); ?></option>
+                                    <option value="appointment"><?php echo esc_html__( 'Appointment', 'households' ); ?></option>
+                                </select>
+                            </label>
+                            <label><?php echo esc_html__( 'When', 'households' ); ?>
+                                <input type="date" name="due_date">
+                            </label>
+                            <button class="primary" type="submit"><?php echo esc_html__( 'Add', 'households' ); ?></button>
+                        </form>
+                    <?php endif; ?>
+
                     <ul class="plain">
-                        <?php foreach ( $hh_day['shared'] as $hh_task ) : ?>
+                        <?php if ( ! $hh_where['known'] ) : ?>
+                            <li class="empty"><?php echo esc_html__( 'Nothing says where you are today, so there is no list to read.', 'households' ); ?></li>
+                        <?php elseif ( ! $hh_tasks ) : ?>
+                            <li class="empty">
+                                <?php
+                                echo $hh_mine
+                                    ? esc_html__( 'Nothing here is asked of you.', 'households' )
+                                    : esc_html__( 'Nothing to do here.', 'households' );
+                                ?>
+                            </li>
+                        <?php endif; ?>
+                        <?php $hh_task_home = $hh_where['home_id']; ?>
+                        <?php foreach ( $hh_tasks as $hh_task ) : ?>
                             <?php require __DIR__ . '/_task.php'; ?>
                         <?php endforeach; ?>
                     </ul>
                 </section>
-            <?php endif; ?>
 
-            <section>
-                <h2><?php echo esc_html__( 'The fortnight ahead', 'households' ); ?></h2>
-                <ul class="plain">
-                    <?php if ( ! $hh_day['agenda'] ) : ?>
-                        <li class="empty"><?php echo esc_html__( 'Nothing due, nobody moving, no birthdays in the next fortnight.', 'households' ); ?></li>
+                <?php // A thing is at one household at a time, so this is the shelf you can actually reach today. ?>
+                <section>
+                    <div class="row heading">
+                        <h2>
+                            <?php
+                            echo $hh_where['known']
+                                ? esc_html( sprintf(
+                                    /* translators: %s: the name of a household. */
+                                    __( 'Things kept at %s', 'households' ),
+                                    $hh_where['name']
+                                ) )
+                                : esc_html__( 'Things kept where you are', 'households' );
+                            ?>
+                        </h2>
+                        <div class="actions">
+                            <a class="pill" href="<?php echo esc_url( View::base() . 'things/' ); ?>"
+                                aria-label="<?php echo esc_attr__( 'Everything kept across your households', 'households' ); ?>">
+                                <?php echo esc_html__( 'all', 'households' ); ?>
+                            </a>
+                        </div>
+                    </div>
+                    <ul class="plain">
+                        <?php if ( ! $hh_where['known'] ) : ?>
+                            <li class="empty"><?php echo esc_html__( 'Nothing says where you are today, so nothing can be said about what is within reach.', 'households' ); ?></li>
+                        <?php elseif ( ! $hh_here['items'] ) : ?>
+                            <li class="empty"><?php echo esc_html__( 'Nothing listed here yet.', 'households' ); ?></li>
+                        <?php endif; ?>
+                        <?php foreach ( isset( $hh_here['items'] ) ? $hh_here['items'] : [] as $hh_thing ) : ?>
+                            <li class="row">
+                                <div class="grow">
+                                    <strong><a href="<?php echo esc_url( View::thing_url( $hh_thing['id'] ) ); ?>"><?php echo esc_html( $hh_thing['title'] ); ?></a></strong>
+                                    <?php if ( $hh_thing['detail'] ) : ?>
+                                        <div class="meta"><?php echo esc_html( $hh_thing['detail'] ); ?></div>
+                                    <?php endif; ?>
+                                </div>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </section>
+            </div>
+
+            <div>
+                <section>
+                    <?php // The headings are the way on: each is the name of the page it opens. ?>
+                    <h2><a href="<?php echo esc_url( View::base() . 'homes/' ); ?>"><?php echo esc_html__( 'Your households', 'households' ); ?></a></h2>
+                    <?php // Said only when there is something to say: where you are is shown by which line is filled in. ?>
+                    <?php if ( ! $hh_me ) : ?>
+                        <?php // Administering a household is not living in it, and this page is about your day, not theirs. ?>
+                        <p class="meta"><?php echo esc_html__( 'You are not in any of these households yourself, so there is nothing here about your day. Add yourself to one and this page fills in.', 'households' ); ?></p>
+                    <?php elseif ( ! $hh_where['known'] ) : ?>
+                        <p class="meta"><?php echo esc_html__( 'Nothing says where you are today. Open one and say — it counts for today alone.', 'households' ); ?></p>
                     <?php endif; ?>
-                    <?php foreach ( $hh_day['agenda'] as $hh_entry ) : ?>
-                        <?php
-                        $hh_line = $hh_entry['title'];
-                        $hh_meta = '';
-                        if ( 'birthday' === $hh_entry['kind'] ) {
-                            /* translators: 1: a name, 2: an age. */
-                            $hh_line = sprintf( __( '%1$s turns %2$d', 'households' ), $hh_entry['title'], $hh_entry['turning'] );
-                        } elseif ( 'move' === $hh_entry['kind'] ) {
-                            /* translators: 1: a list of names, 2: the household they leave, 3: the household they arrive at. */
-                            $hh_line = sprintf(
-                                __( '%1$s: %2$s to %3$s', 'households' ),
-                                implode( ', ', $hh_entry['people'] ),
-                                $hh_entry['from_name'],
-                                $hh_entry['home_name']
-                            );
-                        } else {
-                            /* translators: %s: a name. */
-                            $hh_meta = $hh_entry['who'] ? sprintf( __( 'for %s', 'households' ), $hh_entry['who'] ) : __( 'for the household', 'households' );
-                            if ( 'appointment' === $hh_entry['kind'] ) {
-                                $hh_meta .= ' · ' . __( 'appointment', 'households' );
+                    <ul class="plain homes">
+                        <?php foreach ( $hh_homes as $hh_home ) : ?>
+                            <?php $hh_at = $hh_home['id'] === $hh_where['home_id']; ?>
+                            <li>
+                                <?php // The line is the arrow: opening it is asking who is going, and the name in it is still the way in. ?>
+                                <details class="home<?php echo $hh_at ? ' at' : ''; ?>">
+                                    <summary>
+                                        <a style="text-decoration:none" href="<?php echo esc_url( View::home_url( $hh_home['id'] ) ); ?>"><?php echo esc_html( $hh_home['name'] ); ?></a>
+                                        <span class="who meta"><?php echo esc_html( implode( ', ', wp_list_pluck( $hh_home['here'], 'name' ) ) ); ?></span>
+                                    </summary>
+                                    <?php if ( $hh_party ) : ?>
+                                        <form method="post">
+                                            <?php View::fields( 'say_where', [ 'said_home_id' => $hh_home['id'] ] ); ?>
+                                            <div class="going">
+                                                <?php foreach ( $hh_party as $hh_person ) : ?>
+                                                    <label class="inline">
+                                                        <input type="checkbox" name="people[]" value="<?php echo (int) $hh_person['id']; ?>"
+                                                            <?php checked( $hh_person['is_you'] && ! $hh_at ); ?>>
+                                                        <span><?php echo esc_html( $hh_person['is_you'] ? __( 'you', 'households' ) : $hh_person['name'] ); ?></span>
+                                                    </label>
+                                                <?php endforeach; ?>
+                                            </div>
+                                            <div class="actions" style="padding-left:8px">
+                                                <button class="primary" type="submit">
+                                                    <?php
+                                                    echo $hh_at
+                                                        ? esc_html__( 'Say they are here', 'households' )
+                                                        : esc_html__( 'Move here', 'households' );
+                                                    ?>
+                                                </button>
+                                                <?php // What you said about today, taken back: the pattern answers again, or nothing does. The button names the same field as the hidden one above it and is posted after it, so what it says is what arrives. ?>
+                                                <?php if ( $hh_at && $hh_where['said'] ) : ?>
+                                                    <button type="submit" name="said_home_id" value="0" class="quiet">
+                                                        <?php echo $hh_where['rotates'] ? esc_html__( 'Back to the pattern', 'households' ) : esc_html__( 'Elsewhere', 'households' ); ?>
+                                                    </button>
+                                                <?php endif; ?>
+                                            </div>
+                                        </form>
+                                    <?php else : ?>
+                                        <p class="meta" style="padding-left:8px"><?php echo esc_html__( 'There is nobody here you can say a day for.', 'households' ); ?></p>
+                                    <?php endif; ?>
+                                </details>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </section>
+
+                <section id="hh-agenda">
+                    <h2><a href="<?php echo esc_url( View::base() . 'where/' ); ?>"><?php echo esc_html__( 'Who is where', 'households' ); ?></a></h2>
+                    <ul class="plain">
+                        <?php if ( ! $hh_day['agenda'] ) : ?>
+                            <li class="empty"><?php echo esc_html__( 'Nothing due, nobody moving, no birthdays in the next fortnight.', 'households' ); ?></li>
+                        <?php endif; ?>
+                        <?php foreach ( $hh_day['agenda'] as $hh_entry ) : ?>
+                            <?php
+                            $hh_line = $hh_entry['title'];
+                            $hh_meta = '';
+                            if ( 'birthday' === $hh_entry['kind'] ) {
+                                /* translators: 1: a name, 2: an age. */
+                                $hh_line = sprintf( __( '%1$s turns %2$d', 'households' ), $hh_entry['title'], $hh_entry['turning'] );
+                            } elseif ( 'move' === $hh_entry['kind'] ) {
+                                /* translators: 1: a list of names, 2: the household they leave, 3: the household they arrive at. */
+                                $hh_line = sprintf(
+                                    __( '%1$s: %2$s to %3$s', 'households' ),
+                                    implode( ', ', $hh_entry['people'] ),
+                                    $hh_entry['from_name'],
+                                    $hh_entry['home_name']
+                                );
+                            } else {
+                                /* translators: %s: a name. */
+                                $hh_meta = $hh_entry['who'] ? sprintf( __( 'for %s', 'households' ), $hh_entry['who'] ) : __( 'for the household', 'households' );
+                                if ( 'appointment' === $hh_entry['kind'] ) {
+                                    $hh_meta .= ' · ' . __( 'appointment', 'households' );
+                                }
                             }
-                        }
-                        ?>
-                        <li class="row">
-                            <div class="grow">
-                                <strong><?php echo esc_html( $hh_line ); ?></strong>
-                                <?php if ( $hh_meta ) : ?>
-                                    <div class="meta"><?php echo esc_html( $hh_meta ); ?></div>
-                                <?php endif; ?>
-                            </div>
-                            <div class="actions">
-                                <?php // A move names both households in its line; the pill would say it twice. ?>
-                                <?php if ( $hh_entry['home_id'] && 'move' !== $hh_entry['kind'] ) : ?>
-                                    <a class="pill" style="text-decoration:none" href="<?php echo esc_url( View::home_url( $hh_entry['home_id'] ) ); ?>">
-                                        <?php
-                                        /* translators: %s: the name of a household. */
-                                        echo esc_html( sprintf( __( 'at %s', 'households' ), $hh_entry['home_name'] ) );
-                                        ?>
-                                    </a>
-                                <?php endif; ?>
-                                <span class="pill"><?php echo esc_html( $hh_entry['when'] ); ?></span>
-                            </div>
-                        </li>
-                    <?php endforeach; ?>
-                </ul>
-            </section>
+                            ?>
+                            <li class="row">
+                                <div class="grow">
+                                    <?php // A move is a day on the board, so its line is the way to it: the fortnight, read from the household being arrived at. ?>
+                                    <?php if ( 'move' === $hh_entry['kind'] && $hh_entry['home_id'] ) : ?>
+                                        <strong><a href="<?php echo esc_url( add_query_arg( 'home', $hh_entry['home_id'], View::base() . 'where/' ) ); ?>"><?php echo esc_html( $hh_line ); ?></a></strong>
+                                    <?php else : ?>
+                                        <strong><?php echo esc_html( $hh_line ); ?></strong>
+                                    <?php endif; ?>
+                                    <?php if ( $hh_meta ) : ?>
+                                        <div class="meta"><?php echo esc_html( $hh_meta ); ?></div>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="actions">
+                                    <?php // A move names both households in its line; the pill would say it twice. ?>
+                                    <?php if ( $hh_entry['home_id'] && 'move' !== $hh_entry['kind'] ) : ?>
+                                        <a class="pill" style="text-decoration:none" href="<?php echo esc_url( View::home_url( $hh_entry['home_id'] ) ); ?>">
+                                            <?php
+                                            /* translators: %s: the name of a household. */
+                                            echo esc_html( sprintf( __( 'at %s', 'households' ), $hh_entry['home_name'] ) );
+                                            ?>
+                                        </a>
+                                    <?php endif; ?>
+                                    <span class="pill"><?php echo esc_html( $hh_entry['when'] ); ?></span>
+                                </div>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </section>
+            </div>
+        </div>
         <?php endif; ?>
 
-        <p class="subtitle">
-            <a href="<?php echo esc_url( View::base() . 'homes/' ); ?>"><?php echo esc_html__( 'Your households, and adding another', 'households' ); ?></a>
-            ·
-            <a href="<?php echo esc_url( View::base() . 'where/' ); ?>"><?php echo esc_html__( 'Who is where, day by day', 'households' ); ?></a>
-            ·
-            <a href="<?php echo esc_url( View::base() . 'things/' ); ?>"><?php echo esc_html__( 'Everything kept across your households', 'households' ); ?></a>
-        </p>
+<?php if ( $hh_homes ) : ?>
+<script>
+/*
+ * The list already works without this. The + is a link asking for the page with
+ * the form open, whose list it is is another, ticking something is a form, and
+ * writing something down posts and comes back to a page read afresh. All the
+ * script does is spare the page going away and coming back: the form is already
+ * here, so showing it is an attribute rather than a request, and everything
+ * asked for is asked of the same URLs, with the sections the server rendered in
+ * reply put back in. Nothing is worked out here that the server has not worked
+ * out already.
+ */
+( function () {
+    var live = [ 'hh-todo', 'hh-agenda' ];
+    if ( ! document.getElementById( 'hh-todo' ) || ! window.fetch || ! window.DOMParser || ! window.FormData ) {
+        return;
+    }
+
+    // Said on the document, so the buttons that are only there for a page with
+    // no script go quiet — and stay quiet however often a section is exchanged.
+    document.documentElement.setAttribute( 'data-hh-live', '' );
+
+    function swap( html ) {
+        // The server has no idea the form is open — that is not in the URL and
+        // does not belong there — so what came back has it shut, and it is put
+        // back the way it was found.
+        var form = document.getElementById( 'add' );
+        var was = form && ! form.hidden;
+        var fresh = new DOMParser().parseFromString( html, 'text/html' );
+        live.forEach( function ( id ) {
+            var here = document.getElementById( id );
+            var came = fresh.getElementById( id );
+            if ( here && came ) {
+                here.replaceWith( came );
+            }
+        } );
+        if ( was ) {
+            reveal( true );
+        }
+    }
+
+    /** Show the form, or hide it, and leave the + saying what it would do next. */
+    function reveal( show ) {
+        var form = document.getElementById( 'add' );
+        var link = document.querySelector( '#hh-todo a[data-hh-add]' );
+        if ( ! form || ! link ) {
+            return;
+        }
+        form.hidden = ! show;
+        link.textContent = show ? '\u00d7' : '+';
+        link.setAttribute( 'aria-expanded', show ? 'true' : 'false' );
+        link.href = link.getAttribute( show ? 'data-hh-close' : 'data-hh-open' );
+    }
+
+    function load( url, form ) {
+        var busy = document.getElementById( 'hh-todo' );
+        busy.setAttribute( 'aria-busy', 'true' );
+        fetch( url, form
+            ? { method: 'POST', body: new FormData( form ), credentials: 'same-origin' }
+            : { credentials: 'same-origin' } )
+            .then( function ( response ) {
+                if ( ! response.ok ) {
+                    throw new Error( String( response.status ) );
+                }
+                return response.text();
+            } )
+            .then( function ( html ) {
+                swap( html );
+                // Written down and gone from the fields: the next one is
+                // expected, so the cursor is put back where it was. Ticking
+                // something off is not that, and takes no cursor anywhere.
+                var again = form && 'add' === form.id
+                    ? document.querySelector( '#hh-todo form#add:not([hidden]) input[name="title"]' )
+                    : null;
+                if ( again ) {
+                    again.focus();
+                }
+            } )
+            // Anything unexpected hands the page back to the browser, which has
+            // known how to do this all along.
+            .catch( function () {
+                if ( form ) {
+                    form.submit();
+                } else {
+                    window.location.href = url;
+                }
+            } );
+    }
+
+    // Listening is done once, from outside what gets exchanged, so no amount of
+    // swapping can leave a form posting twice or a link doing nothing.
+    document.addEventListener( 'submit', function ( event ) {
+        var form = event.target.closest( '#hh-todo form' );
+        if ( ! form ) {
+            return;
+        }
+        event.preventDefault();
+        load( window.location.href, form );
+    } );
+
+    // A box being ticked is the form it is in being posted; the button beside it
+    // says the same thing to a page that never ran this.
+    document.addEventListener( 'change', function ( event ) {
+        var box = event.target.closest( '#hh-todo input[data-hh-tick]' );
+        if ( ! box || ! box.form ) {
+            return;
+        }
+        load( window.location.href, box.form );
+    } );
+
+    // Whose list it is is a link like any other; it is only the page around it
+    // that need not be fetched again to answer it.
+    document.addEventListener( 'click', function ( event ) {
+        var link = event.target.closest( '#hh-todo a[data-hh-live]' );
+        if ( ! link ) {
+            return;
+        }
+        event.preventDefault();
+        window.history.replaceState( {}, '', link.href );
+        load( link.href, null );
+    } );
+
+    // Opening the form changes nothing anybody could be sent or reload into, so
+    // it changes nothing about the URL either. It is a form being shown.
+    document.addEventListener( 'click', function ( event ) {
+        var link = event.target.closest( '#hh-todo a[data-hh-add]' );
+        var form = document.getElementById( 'add' );
+        if ( ! link || ! form ) {
+            return;
+        }
+        event.preventDefault();
+        var opening = form.hidden;
+        reveal( opening );
+        if ( opening ) {
+            var title = form.querySelector( 'input[name="title"]' );
+            if ( title ) {
+                title.focus();
+            }
+        }
+    } );
+}() );
+</script>
+<?php endif; ?>
 <?php require __DIR__ . '/_foot.php'; ?>
