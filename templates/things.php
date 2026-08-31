@@ -1,7 +1,8 @@
 <?php
 /**
- * Everything kept across the households you belong to, and which one it is at.
- * A thing is in one place at a time, so it is moved rather than removed.
+ * Everything kept across the households you belong to, and which of them keep
+ * it. A thing can be kept at more than one, so read house by house it appears
+ * under each, and read as one list it appears once and names them.
  */
 
 namespace Households;
@@ -16,16 +17,18 @@ $hh_homes = View::storage()->get_homes_for_user( $hh_user );
 $hh_flat = ! empty( $_GET['flat'] );
 $hh_url = remove_query_arg( 'problem' );
 
-// Grouped, the household is a heading and every thing under it says nothing
-// about where it is, because the heading already did.
+// Grouped, the household is a heading and every thing under it says where in
+// that house it lives, because the heading already said which house.
 $hh_groups = [];
 if ( ! $hh_flat ) {
     foreach ( $hh_homes as $hh_home ) {
         $hh_groups[ $hh_home['id'] ] = [ 'name' => $hh_home['name'], 'things' => [] ];
     }
     foreach ( $hh_things as $hh_thing ) {
-        if ( isset( $hh_groups[ $hh_thing['home_id'] ] ) ) {
-            $hh_groups[ $hh_thing['home_id'] ]['things'][] = $hh_thing;
+        foreach ( $hh_thing['homes'] as $hh_at ) {
+            if ( isset( $hh_groups[ $hh_at['id'] ] ) ) {
+                $hh_groups[ $hh_at['id'] ]['things'][] = $hh_thing;
+            }
         }
     }
 }
@@ -97,7 +100,7 @@ require __DIR__ . '/_head.php';
             <?php elseif ( $hh_flat ) : ?>
                 <ul class="plain">
                     <?php foreach ( $hh_things as $hh_thing ) : ?>
-                        <?php $hh_thing_said = false; ?>
+                        <?php $hh_thing_home = 0; ?>
                         <?php require __DIR__ . '/_thing.php'; ?>
                     <?php endforeach; ?>
                 </ul>
@@ -111,7 +114,7 @@ require __DIR__ . '/_head.php';
                             <li class="meta"><?php echo esc_html__( 'Nothing listed here.', 'households' ); ?></li>
                         <?php endif; ?>
                         <?php foreach ( $hh_group['things'] as $hh_thing ) : ?>
-                            <?php $hh_thing_said = true; ?>
+                            <?php $hh_thing_home = $hh_group_id; ?>
                             <?php require __DIR__ . '/_thing.php'; ?>
                         <?php endforeach; ?>
                     </ul>
