@@ -164,7 +164,7 @@ require __DIR__ . '/_head.php';
                 </ul>
             <?php else : ?>
                 <?php foreach ( $hh_groups as $hh_group_id => $hh_group ) : ?>
-                    <h3 style="margin:14px 0 6px;font-size:0.95rem">
+		    <h3>
                         <a href="<?php echo esc_url( View::home_url( $hh_group_id ) ); ?>"><?php echo esc_html( $hh_group['name'] ); ?></a>
                     </h3>
                     <ul class="plain">
