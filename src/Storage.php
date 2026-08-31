@@ -1663,8 +1663,15 @@ class Storage {
     }
 
     /**
-     * The fortnight ahead as one list: what is due, who is moving, and whose
-     * birthday it is, across every home the viewer belongs to.
+     * The fortnight ahead as one list: what is booked, who is moving, and
+     * whose birthday it is, across every home the viewer belongs to.
+     *
+     * A day that is coming, not a list of jobs. What is written down to be
+     * done is read where it is done, on the household's own list, and the
+     * index has that list beside this one; repeating it here made the
+     * fortnight mostly chores and buried the three things it is for. An
+     * appointment is the exception because it is not a job at all: it is an
+     * hour somebody else has already claimed.
      *
      * @return array[] each entry naming its `kind`, dated and said out loud.
      */
@@ -1673,7 +1680,7 @@ class Storage {
             ->modify( '+' . $days . ' days' )->format( 'Y-m-d' );
 
         $entries = array_merge(
-            $this->agenda_due( $user_id, $viewer, $today, $horizon ),
+            $this->agenda_appointments( $user_id, $viewer, $today, $horizon ),
             $this->agenda_moves( $user_id, $today, $days ),
             $this->agenda_birthdays( $user_id, $days )
         );
@@ -1689,18 +1696,18 @@ class Storage {
     }
 
     /**
-     * Appointments and dated tasks falling inside the window.
+     * Appointments falling inside the window.
      *
      * Someone organising a home sees everything written down in it; anyone else
      * sees what is theirs and what is the house's, which is the rule the home
      * page itself reads by.
      */
-    private function agenda_due( int $user_id, int $viewer, string $from, string $until ): array {
+    private function agenda_appointments( int $user_id, int $viewer, string $from, string $until ): array {
         $entries = [];
         foreach ( $this->get_homes_for_user( $user_id ) as $home ) {
             $sees_everything = Access::can_organise( $user_id, $home['id'] );
             foreach ( $this->get_tasks( $home['id'] ) as $task ) {
-                if ( $task['is_done'] || '' === $task['due_date'] ) {
+                if ( $task['is_done'] || 'appointment' !== $task['task_type'] || '' === $task['due_date'] ) {
                     continue;
                 }
                 if ( $task['due_date'] < $from || $task['due_date'] > $until ) {
@@ -1711,7 +1718,7 @@ class Storage {
                 }
                 $entries[] = [
                     'date'      => $task['due_date'],
-                    'kind'      => 'appointment' === $task['task_type'] ? 'appointment' : 'task',
+                    'kind'      => 'appointment',
                     'title'     => $task['title'],
                     'who'       => $task['person'],
                     'home_id'   => $home['id'],
