@@ -157,23 +157,16 @@ $hh_thing_tick = $hh_thing_writing
             <div class="meta"><?php echo esc_html__( 'It is not at any of your households just now.', 'households' ); ?></div>
         <?php endif; ?>
     </div>
-    <?php // Which house it is at and where in that house it should be, together on the line the thing is on: a list with no heading over it is a list being read to find something, and the second answer means nothing without the first. ?>
+    <?php // Which house it is at and where in that house it should be, as one phrase on the line the thing is on: a list with no heading over it is a list being read to find something, and the place means nothing without the house in front of it. It is a sentence rather than a badge, because it is the answer rather than a label on one. ?>
     <?php if ( ! $hh_thing_at_said ) : ?>
-        <div class="actions">
+        <div class="meta">
             <?php if ( $hh_thing_at_mine ) : ?>
-                <a class="pill" href="<?php echo esc_url( View::home_url( $hh_thing_at['home_id'] ) ); ?>">
-                    <?php
-                    /* translators: %s: the name of a household. */
-                    echo esc_html( sprintf( __( 'at %s', 'households' ), $hh_thing_at['name'] ) );
-                    ?>
-                </a>
-                <?php if ( $hh_thing_at_where ) : ?>
-                    <span class="meta"><?php echo esc_html( $hh_thing_at_where ); ?></span>
-                <?php endif; ?>
+                <?php // Said in one breath, so the colon does not come away from the name it belongs to. ?>
+                <a href="<?php echo esc_url( View::home_url( $hh_thing_at['home_id'] ) ); ?>"><?php echo esc_html( $hh_thing_at['name'] ); ?></a><?php echo $hh_thing_at_where ? ': ' . esc_html( $hh_thing_at_where ) : ''; ?>
             <?php elseif ( ! empty( $hh_thing_at['home_id'] ) ) : ?>
-                <span class="pill"><?php echo esc_html__( 'somewhere that is not yours', 'households' ); ?></span>
+                <?php echo esc_html__( 'Somewhere that is not yours', 'households' ); ?>
             <?php else : ?>
-                <span class="pill"><?php echo esc_html__( 'nobody has said', 'households' ); ?></span>
+                <?php echo esc_html__( 'Nobody has said where it is', 'households' ); ?>
             <?php endif; ?>
         </div>
     <?php endif; ?>
