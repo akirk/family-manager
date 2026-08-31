@@ -218,7 +218,8 @@ $hh_fact_showing = $hh_writing && ( 'new' === $hh_facting || $hh_fact_note );
         <?php // Ticking something off the packing is a tick like any other, so the section it is in comes back from the server rather than the page going away and returning. ?>
         <section id="hh-things" data-hh-live-section>
             <div class="row heading">
-                <h2><?php echo esc_html__( 'Things that are here', 'households' ); ?></h2>
+                <?php // The heading is the way on: what is here is one house's worth of everything kept across them all. ?>
+                <h2><a href="<?php echo esc_url( View::base() . 'things/' ); ?>"><?php echo esc_html__( 'Things that are here', 'households' ); ?></a></h2>
                 <?php if ( $hh_writing ) : ?>
                     <details class="add">
                         <summary><?php echo esc_html__( '+ Add', 'households' ); ?></summary>
