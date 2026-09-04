@@ -1,7 +1,7 @@
 # Households
 
 - Contributors: akirk
-- Tags: family, chores, co-parenting, tasks, inventory
+- Tags: family, chores, co-parenting, inventory, wp-app
 - Requires at least: 6.0
 - Requires PHP: 7.4
 - Tested up to: 7.1
