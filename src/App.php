@@ -131,6 +131,7 @@ class App extends BaseApp {
                 }
                 $this->app->add_menu_item(
                     'view-as-' . $person['id'],
+                    /* translators: %s: the name of a person in this household. */
                     sprintf( __( 'View as %s', 'households' ), $person['name'] ),
                     $base . $open . '/as/' . $person['id'] . '/'
                 );
@@ -309,7 +310,7 @@ class App extends BaseApp {
      * anything did, is named in the URL and said by the page.
      */
     public function handle_post(): void {
-        if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) ? $_SERVER['REQUEST_METHOD'] : '' ) ) {
+        if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : '' ) ) {
             return;
         }
         if ( ! is_user_logged_in() || null === $this->app_request_path() ) {
@@ -365,6 +366,10 @@ class App extends BaseApp {
      * @return array{problem:string,to:string}
      */
     private function perform( string $action ): array {
+        // Nothing here is reached until handle_post() has verified the nonce for
+        // this very action, so every read of $_POST below is a read behind that
+        // check; PHPCS cannot see across the two methods.
+        // phpcs:disable WordPress.Security.NonceVerification.Missing
         $user_id = get_current_user_id();
         $viewer_person = Access::person_for_user( $user_id );
 
@@ -372,7 +377,11 @@ class App extends BaseApp {
             if ( ! isset( $_POST[ $key ] ) ) {
                 return 'int' === $filter ? 0 : '';
             }
-            $value = wp_unslash( $_POST[ $key ] );
+            // Unslashed here and sanitized a line later by the filter asked for;
+            // 'raw' is the deliberate exception, and what it feeds — a note's
+            // prose, a line about where a thing lives — is sanitized by Storage
+            // as it is written, which is where the right filter is known.
+            $value = wp_unslash( $_POST[ $key ] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
             switch ( $filter ) {
                 case 'int':
                     return absint( $value );
@@ -709,7 +718,7 @@ class App extends BaseApp {
                 if ( Storage::ITEM !== $kind || ! $this->storage->may_reach_note( $user_id, $note_id, $kind ) ) {
                     return $this->refuse();
                 }
-                $lines = isset( $_POST['where'] ) ? (array) wp_unslash( $_POST['where'] ) : [];
+                $lines = isset( $_POST['where'] ) ? (array) map_deep( wp_unslash( $_POST['where'] ), 'sanitize_text_field' ) : [];
                 foreach ( $lines as $line_home => $line ) {
                     $line_home = absint( $line_home );
                     if ( $line_home && current_user_can( 'organise_household', $line_home ) ) {
@@ -788,6 +797,7 @@ class App extends BaseApp {
         }
 
         return $this->done();
+        // phpcs:enable WordPress.Security.NonceVerification.Missing
     }
 
     /**

@@ -331,8 +331,8 @@ require __DIR__ . '/_head.php';
                                 /* translators: 1: a name, 2: an age. */
                                 $hh_line = sprintf( __( '%1$s turns %2$d', 'households' ), $hh_entry['title'], $hh_entry['turning'] );
                             } elseif ( 'move' === $hh_entry['kind'] ) {
-                                /* translators: 1: a list of names, 2: the household they leave, 3: the household they arrive at. */
                                 $hh_line = sprintf(
+                                    /* translators: 1: a list of names, 2: the household they leave, 3: the household they arrive at. */
                                     __( '%1$s: %2$s to %3$s', 'households' ),
                                     implode( ', ', $hh_entry['people'] ),
                                     $hh_entry['from_name'],

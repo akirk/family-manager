@@ -19,7 +19,8 @@ $hh_title = isset( $hh_title ) && '' !== trim( $hh_title ) ? $hh_title : __( 'Ho
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo wp_app_title( $hh_title ); ?></title>
+    <?php // wp_app_title() returns its value already run through esc_html(); escaping it again would double-encode entities in the title or site name. ?>
+    <title><?php echo wp_app_title( $hh_title ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></title>
     <?php wp_app_head(); ?>
     <style>
         :root {
