@@ -16,6 +16,10 @@
 
 namespace Households;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 $hh_form_people = isset( $hh_form_people ) ? $hh_form_people : [];
 $hh_form_homes = isset( $hh_form_homes ) ? $hh_form_homes : [];
 $hh_form_task = ! empty( $hh_form_task ) ? $hh_form_task : [];

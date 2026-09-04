@@ -13,6 +13,10 @@
 
 namespace Households;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 $hh_fact_note = ! empty( $hh_fact_note ) ? $hh_fact_note : [];
 $hh_fact_shut = isset( $hh_fact_shut ) ? $hh_fact_shut : remove_query_arg( 'fact' );
 $hh_fact_open = ! empty( $hh_fact_open );

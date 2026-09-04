@@ -15,6 +15,10 @@
 
 namespace Households;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 // Read for display only; putting it back is a form of its own, with its own
 // nonce, and everything it asks for is asked again of the viewer.
 // phpcs:disable WordPress.Security.NonceVerification.Recommended

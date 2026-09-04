@@ -1,4 +1,8 @@
 /vendor/
 
+# Not committed on purpose: the build resolves akirk/wp-app fresh, so updating
+# the framework needs no commit here.
+/composer.lock
+
 # Worktrees Claude Code creates for isolated agent runs.
 /.claude/worktrees/

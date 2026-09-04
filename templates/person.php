@@ -5,6 +5,10 @@
 
 namespace Households;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 $hh_person_id = (int) get_query_var( 'person_id' );
 $hh_user = View::user_id();
 $hh_allowed = Access::can_view_person( $hh_user, $hh_person_id );

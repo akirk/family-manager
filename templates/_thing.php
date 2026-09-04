@@ -30,6 +30,10 @@
 
 namespace Households;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 // Under a household's heading the line says where in that house it lives, and
 // names the others only to say that they have it too. Read across households
 // nothing has been said yet, so each one says its own name and its own answer.

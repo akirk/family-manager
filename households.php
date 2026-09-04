@@ -1,12 +1,17 @@
 <?php
 /**
  * Plugin Name: Households
- * Description: A WpApp dashboard for a household, or for several: who is at which home, shared tasks and appointments, and what each house needs people to know.
+ * Plugin URI: https://github.com/akirk/households
+ * Description: Run a household, or several: who is at which home today, what each house needs people to know, the things kept there and what still needs doing.
  * Version: 1.1.0
- * Author: Alex Kirk
- * Text Domain: households
+ * Requires at least: 6.0
  * Tested up to: 7.1
  * Requires PHP: 7.4
+ * Author: Alex Kirk
+ * Author URI: https://alex.kirk.at/
+ * License: GPL-2.0-or-later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain: households
  */
 
 namespace Households;
