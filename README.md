@@ -153,12 +153,6 @@ it untouched, so a swapped weekend does not shift every week after it. Switched
 *from that day onwards* instead, it clears whatever was already arranged after
 it in the fortnight.
 
-### Does it need JavaScript?
-No. Every page is server-rendered PHP and every change is a form posting back
-to its own URL. Two places use a little JavaScript — a confirmation on removing
-someone from a home, and in-place paging on the whereabouts board — and neither
-is needed for the page to work.
-
 ### Where does the plugin put its pages?
 At `/households/`, as its own app rather than inside wp-admin. That comes from
 [WpApp](https://github.com/akirk/wp-app), the framework this is built on.
