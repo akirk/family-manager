@@ -1,5 +1,18 @@
 # Households
 
+- Contributors: akirk
+- Tags: family, chores, co-parenting, tasks, inventory
+- Requires at least: 6.0
+- Requires PHP: 7.4
+- Tested up to: 7.1
+- Stable tag: 1.1.0
+- License: GPL-2.0-or-later
+- License URI: https://www.gnu.org/licenses/gpl-2.0.html
+
+Run a household, or several: who is at which home today, what each house needs people to know, the things kept there and what still needs doing.
+
+## Description
+
 A WordPress app for running a household — or several. Most family apps assume
 one home; this one is built for the families that have more than one. Built on
 [WpApp](https://github.com/akirk/wp-app), so it runs as its own app at
@@ -9,7 +22,7 @@ one home; this one is built for the families that have more than one. Built on
 
 [Try it in OpenStation](https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/akirk/households/main/blueprint-openstation.json) — the same app opened in desktop mode with the [OpenStation](https://github.com/WordPress/openstation) plugin.
 
-## What it does
+### What it does
 
 - **An overview about you, not about your houses.** The front page answers what
   today wants from you: on the left what the household you are standing in
@@ -73,17 +86,7 @@ one home; this one is built for the families that have more than one. Built on
   asked per home; whether someone is a child is a property of the person.
   Nothing else is a role, so there is no permission language to learn.
 
-## Install
-
-```bash
-cd wp-content/plugins/households
-composer install
-```
-
-Activate **Households** in WordPress and visit `/households/`. Requires PHP 7.4+
-and a logged-in user.
-
-## Development notes
+### How it is built
 
 - A home is a term, everything in it is a post tagged with that term, and there
   are no custom tables. A person is a post, and a WordPress login is optional
@@ -108,22 +111,72 @@ and a logged-in user.
   `src/App.php` — routes and form handling. `src/View.php` — form helpers.
   Templates live in `templates/`.
 
+Development of this plugin happens [on GitHub](https://github.com/akirk/households).
+Pull requests welcome.
+
+## Installation
+
+1. Upload the `households` directory to the `/wp-content/plugins/` directory
+1. Activate the plugin through the 'Plugins' menu in WordPress
+1. Visit `/households/`
+
+Installing from a git checkout instead of a release ZIP needs the Composer
+dependency to be fetched first:
+
 ```bash
-php -l src/App.php
-./vendor/bin/phpcs --standard=.phpcs.xml.dist src templates
+cd wp-content/plugins/households
+composer install
 ```
 
-## Status
+## Frequently Asked Questions
 
-This started as Family Manager, was renamed to Households, and has since been
-rebuilt from scratch. There is no upgrade path from either — this is a
-prototype, so start it fresh.
+### Does this plugin create custom tables?
+No. A home is a taxonomy term, and people, tasks, appointments, facts and
+things are posts tagged with that term. Rotations and overrides are post meta.
+Remove the plugin and your database is as it was.
 
-The demo blueprint (`demo.json`) seeds three homes — two separated parents and
-a grandparent — with three children who belong to all of them, rotating week on
-and week off between the parents with a one-off day at the grandparent's. The
-youngest has no account at all. The member accounts use the password `demo`.
+### Does everyone in the household need a WordPress account?
+No. Everyone in a home has a person record whether or not they can log in, so a
+small child whose shoe size is worth writing down still gets one. A record can
+be pointed at a WordPress account later, or at nobody at all. The plugin never
+creates accounts itself.
 
-## License
+### How do I set up shared custody or a week at the grandparents?
+Give the person a rotation. It names its homes in order — two, three, as many
+as the family uses — and repeats a 14-day cycle: week on/week off, 2-2-3,
+alternate weekends, or the fourteen days set by hand. A rotation is stored on
+the person, so every home reads the same answer.
 
-GPL-2.0-or-later
+### What if a single day is different from the pattern?
+Tap that day on the whereabouts board. The tap wins over the pattern and leaves
+it untouched, so a swapped weekend does not shift every week after it. Switched
+*from that day onwards* instead, it clears whatever was already arranged after
+it in the fortnight.
+
+### Does it need JavaScript?
+No. Every page is server-rendered PHP and every change is a form posting back
+to its own URL. Two places use a little JavaScript — a confirmation on removing
+someone from a home, and in-place paging on the whereabouts board — and neither
+is needed for the page to work.
+
+### Where does the plugin put its pages?
+At `/households/`, as its own app rather than inside wp-admin. That comes from
+[WpApp](https://github.com/akirk/wp-app), the framework this is built on.
+
+### Is there an upgrade path from Family Manager?
+No. This started as Family Manager, was renamed to Households, and has since
+been rebuilt from scratch. It is a prototype — start it fresh.
+
+## Screenshots
+
+1. The overview: what the household you are standing in still has open, your homes, and the fortnight ahead as one dated list.
+
+## Changelog
+
+### 1.1.0
+- Whereabouts: rotations over a 14-day cycle, per-day overrides, and the
+  handovers that follow from them.
+- Packing lists gathered per trip from the moves the fortnight already holds.
+- Things that know where they live per household and where they are just now.
+- People records independent of WordPress accounts, with sizes stamped by the
+  day they last changed.
