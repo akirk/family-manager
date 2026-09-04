@@ -5,6 +5,10 @@
 
 namespace Households;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 $hh_home_id = (int) get_query_var( 'id' );
 $hh_user = View::user_id();
 $hh = View::storage()->get_dashboard( $hh_user, $hh_home_id );

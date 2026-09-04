@@ -5,6 +5,10 @@
  * their own URL — so there is no client to configure here.
  */
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 // A page says what it is by setting `$hh_title` before requiring this. Left
 // unsaid, the title falls back to the route the page was matched by — which is
 // a regular expression, and reads like one.

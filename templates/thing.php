@@ -13,6 +13,10 @@
 
 namespace Households;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 $hh_user = View::user_id();
 $hh_thing = View::storage()->get_note( (int) get_query_var( 'note_id' ), Storage::ITEM );
 

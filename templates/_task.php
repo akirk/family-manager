@@ -13,6 +13,10 @@
 
 namespace Households;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 $hh_task_url = isset( $hh_task_url ) ? $hh_task_url : remove_query_arg( 'problem' );
 $hh_task_writing = ! empty( $hh_task_writing );
 // Editing is a page you can be sent, reload and come back to, so it is in the

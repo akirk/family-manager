@@ -7,6 +7,10 @@
 
 namespace Households;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 $hh_user = View::user_id();
 $hh_me = View::person_id();
 $hh_day = View::storage()->get_my_day( $hh_user );

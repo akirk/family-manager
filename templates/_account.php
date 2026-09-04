@@ -13,6 +13,10 @@
 
 namespace Households;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 $hh_account = $hh_account_person['user_id'] ? get_userdata( $hh_account_person['user_id'] ) : null;
 $hh_is_me = Access::person_for_user( View::user_id() ) === $hh_account_person['id'];
 ?>

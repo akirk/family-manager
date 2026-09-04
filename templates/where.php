@@ -7,6 +7,10 @@
 
 namespace Households;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 $hh_user = View::user_id();
 $hh_homes = View::storage()->get_homes_for_user( $hh_user );
 

@@ -22,6 +22,10 @@
 
 namespace Households;
 
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 $hh_going_to = ! empty( $hh_going_going['home_id'] ) ? (int) $hh_going_going['home_id'] : 0;
 // Both of the answers to a thing that is going somewhere are answers about the
 // household it is going to — it has got there, or it is not coming after all —
