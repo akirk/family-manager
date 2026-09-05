@@ -164,6 +164,7 @@ been rebuilt from scratch. It is a prototype — start it fresh.
 ## Screenshots
 
 1. The overview: what the household you are standing in still has open, your homes, and the fortnight ahead as one dated list.
+2. The overview on a phone: the same list, with each task's assignee and the things kept at each home below it.
 
 ## Changelog
 
